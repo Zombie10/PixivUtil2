@@ -305,6 +305,45 @@ def export_image_bookmark(caller,
         raise
 
 
+def export_userId_bookmark(caller,
+                          config,
+                          hide='n',
+                          start_page=1,
+                          end_page=0,
+                          tag=None,
+                          use_image_tag=False,
+                          filename='Exported_userId_bookmark.txt'):
+    try:
+        print("Getting image bookmarks...")
+        total_list = list()
+        private_list = list()
+        public_list = list()
+        total_bookmark_count = 0
+
+        if hide == 'n':
+            (public_list, total_bookmark_count) = get_userId_bookmark(caller, config, False, start_page, end_page, tag, use_image_tag)
+        elif hide == 'y':
+            # public and private image bookmarks
+            (public_list, total_bookmark_count_pub) = get_userId_bookmark(caller, config, False, start_page, end_page, tag, use_image_tag)
+            (private_list, total_bookmark_count_priv) = get_userId_bookmark(caller, config, True, start_page, end_page, tag, use_image_tag)
+            total_bookmark_count = total_bookmark_count_pub + total_bookmark_count_priv
+        else:
+            (private_list, total_bookmark_count) = get_userId_bookmark(caller, config, True, start_page, end_page, tag, use_image_tag)
+        total_list.extend(private_list)
+        total_list.extend(public_list)
+
+        PixivBookmark.export_userId_bookmark_list(total_list, filename)
+
+        PixivHelper.print_and_log('info', f"Found {len(total_list)} of {total_bookmark_count} possible member(s) .")
+
+        print("Done.\n")
+    except KeyboardInterrupt:
+        raise
+    except BaseException:
+        PixivHelper.print_and_log('error', 'Error at export_image_bookmark(): {0}'.format(sys.exc_info()))
+        raise
+
+
 def export_image_table(caller, filename, pixiv, fanbox, sketch):
     export_list = list()
     table = list()
@@ -427,6 +466,65 @@ def get_image_bookmark(caller, config, hide, start_page=1, end_page=0, tag=None,
             (bookmarks, total_bookmark_count) = PixivBookmark.parseImageBookmark(page_str, image_tags_filter=tag)
         else:
             (bookmarks, total_bookmark_count) = PixivBookmark.parseImageBookmark(page_str)
+
+        total_list.extend(bookmarks)
+        if len(bookmarks) == 0 and not use_image_tag:
+            print("No more images.")
+            break
+        elif use_image_tag and total_bookmark_count / limit < i:
+            print("Last page reached.")
+            break
+        else:
+            print(f" found {len(bookmarks)} images.")
+
+        i = i + 1
+
+        # Issue#569
+        PixivHelper.wait(config=config)
+
+    return (total_list, total_bookmark_count)
+
+
+def get_userId_bookmark(caller, config, hide, start_page=1, end_page=0, tag=None, use_image_tag=False):
+    """Get user's image bookmark"""
+    br: PixivBrowser = caller.__br__
+    total_list = list()
+    i = start_page
+    offset = 0
+    limit = 48
+    member_id = br._myId
+    total_bookmark_count = 0
+    encoded_tag = ''
+
+    while True:
+        if end_page != 0 and i > end_page:
+            print(f"Page Limit reached: {end_page}")
+            break
+
+        # https://www.pixiv.net/ajax/user/189816/illusts/bookmarks?tag=&offset=0&limit=48&rest=show
+        show = "show"
+        if hide:
+            show = "hide"
+
+        if tag is not None and len(tag) > 0:
+            encoded_tag = PixivHelper.encode_tags(tag)
+        offset = limit * (i - 1)
+        PixivHelper.print_and_log('info', f"Importing user's bookmarked image from page {i}")
+
+        url = f"https://www.pixiv.net/ajax/user/{member_id}/illusts/bookmarks?tag={encoded_tag}&offset={offset}&limit={limit}&rest={show}"
+        if use_image_tag:  # don't filter based on user's bookmark tag
+            url = f"https://www.pixiv.net/ajax/user/{member_id}/illusts/bookmarks?tag=&offset={offset}&limit={limit}&rest={show}"
+            PixivHelper.print_and_log('info', f"Using image tag: {tag}")
+
+        PixivHelper.print_and_log('info', f"Source URL: {url}")
+        page = br.open(url)
+        page_str = page.read().decode('utf8')
+        page.close()
+
+        if use_image_tag:
+            (bookmarks, total_bookmark_count) = PixivBookmark.parseUserIdBookmark(page_str, image_tags_filter=tag)
+        else:
+            (bookmarks, total_bookmark_count) = PixivBookmark.parseUserIdBookmark(page_str)
 
         total_list.extend(bookmarks)
         if len(bookmarks) == 0 and not use_image_tag:

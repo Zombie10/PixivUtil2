@@ -98,6 +98,7 @@ def header():
     print("┌" + "".ljust(PADDING - 2, "─") + "┐")
     print("│ " + Fore.YELLOW + Back.BLACK + Style.BRIGHT + f"PixivDownloader2 version {PixivConstant.PIXIVUTIL_VERSION}".ljust(PADDING - 3, " ") + Style.RESET_ALL + "│")
     print("│ " + Fore.CYAN + Back.BLACK + Style.BRIGHT + PixivConstant.PIXIVUTIL_LINK.ljust(PADDING - 3, " ") + Style.RESET_ALL + "│")
+    print("│ " + Fore.MAGENTA + Back.BLACK + Style.BRIGHT + PixivConstant.PIXIVUTIL_PERSONALIZATION.ljust(PADDING - 3, " ") + Style.RESET_ALL + "│")
     print("│ " + Fore.YELLOW + Back.BLACK + Style.BRIGHT + f"Donate at {Fore.CYAN}{Style.BRIGHT}{PixivConstant.PIXIVUTIL_DONATE}".ljust(PADDING + 6, " ") + Style.RESET_ALL + "│")
     print("└" + "".ljust(PADDING - 2, "─") + "┘")
 
@@ -190,6 +191,7 @@ def menu():
     print(' e. Export online followed artist.')
     print(' m. Export online other\'s followed artist.')
     print(' p. Export online image bookmarks.')
+    print(' z. Export userId bookmarks.')
     print(' i. Import list file')
     print(' u. Ugoira re-encode')
     print(' r. Reload config.ini')
@@ -1198,6 +1200,52 @@ def menu_print_config():
     __config__.printConfig()
 
 
+def menu_export_userId_bookmark(opisvalid, args, options):
+    __log__.info("Export User's Bookmark mode (z).")
+    start_page = 1
+    end_page = 0
+    hide = 'n'
+    tag = ''
+    use_image_tag = False
+    filename = "Exported_userId_bookmark.txt"
+
+    if opisvalid:
+        if len(args) > 0:
+            tag = args[0]
+
+        (start_page, end_page) = get_start_and_end_page_from_options(options)
+        if options.bookmark_flag is not None:
+            hide = options.bookmark_flag.lower()
+            if hide not in ('y', 'n', 'o'):
+                PixivHelper.print_and_log("error", f"Invalid args for bookmark_flag: {options.bookmark_flag}, valid values are [y/n/o].")
+                return
+        use_image_tag = options.use_image_tag
+        if options.export_filename is not None:
+            filename = options.export_filename
+    else:
+        hide = input("Include Private bookmarks [y/n/o, default is no]: ").rstrip("\r") or 'n'
+        hide = hide.lower()
+        if hide not in ('y', 'n', 'o'):
+            print("Invalid args: ", hide)
+            return
+        tag = input("Tag (press enter for all images): ").rstrip("\r") or ''
+        (start_page, end_page) = PixivHelper.get_start_and_end_number(total_number_of_page=options.number_of_pages)
+        if tag != '':
+            use_image_tag = input("Use Image Tags as the filter [y/n, default is no]? ").rstrip("\r") or 'n'
+            use_image_tag = use_image_tag.lower()
+            use_image_tag = True if use_image_tag == 'y' else False
+        filename = input(f"Filename (default is '{filename}'): ").rstrip("\r") or filename
+
+    PixivBookmarkHandler.export_userId_bookmark(sys.modules[__name__],
+                                                __config__,
+                                                hide=hide,
+                                                start_page=start_page,
+                                                end_page=end_page,
+                                                tag=tag,
+                                                use_image_tag=use_image_tag,
+                                                filename=filename)
+
+
 def set_console_title(title=''):
     set_title = f'PixivDownloader {PixivConstant.PIXIVUTIL_VERSION} {title}'
     PixivHelper.set_console_title(set_title)
@@ -1209,7 +1257,7 @@ def setup_option_parser():
     __valid_options = ('1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14', '15', '16', '17', '18',
                        'f1', 'f2', 'f3', 'f4', 'f5',
                        's1', 's2',
-                       'l', 'd', 'e', 'm', 'b', 'p', 'c')
+                       'l', 'd', 'e', 'm', 'b', 'p', 'c', 'z')
     parser = OptionParser()
 
     # need to keep the whitespace to adjust the output for --help
@@ -1256,6 +1304,9 @@ d  - Manage database''')
     parser.add_option('-c', '--config', dest='configlocation',
                       default=None,
                       help='Load the config file from a custom location')
+    parser.add_option('-z', '--userId_bookmark', dest='userId_bookmark',
+                      default=None,
+                      help='Load the userId from your bookmark')
     parser.add_option('--bf', '--batch_file',
                       dest='batch_file',
                       default=None,
@@ -1448,6 +1499,8 @@ def main_loop(ewd, op_is_valid, selection, np_is_valid_local, args, options):
                 menu_reload_config()
             elif selection == 'c':
                 menu_print_config()
+            elif selection == 'z':
+                menu_export_userId_bookmark(op_is_valid, args, options)
             elif selection == 'i':
                 menu_import_list()
 
