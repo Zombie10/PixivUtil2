@@ -87,9 +87,9 @@ def get_logger(level=None, reload=False):
                     level = _config.logLevel
             __logger.setLevel(level)
             __logHandler__ = logging.handlers.RotatingFileHandler(script_path + os.sep + PixivConstant.PIXIVUTIL_LOG_FILE,
-                                                                maxBytes=PixivConstant.PIXIVUTIL_LOG_SIZE,
-                                                                backupCount=PixivConstant.PIXIVUTIL_LOG_COUNT,
-                                                                encoding="utf-8")
+                                                                  maxBytes=PixivConstant.PIXIVUTIL_LOG_SIZE,
+                                                                  backupCount=PixivConstant.PIXIVUTIL_LOG_COUNT,
+                                                                  encoding="utf-8")
             __formatter__ = logging.Formatter(PixivConstant.PIXIVUTIL_LOG_FORMAT)
             __logHandler__.setFormatter(__formatter__)
             __logger.addHandler(__logHandler__)
@@ -614,7 +614,7 @@ def dump_html(filename, html_text):
     return ""
 
 
-def print_and_log(level, msg, exception=None, newline=True, end=None):
+def print_and_log(level, msg, exception: Exception = None, newline=True, end=None):
     if level == 'debug':
         get_logger().debug(msg)
     else:
@@ -626,11 +626,12 @@ def print_and_log(level, msg, exception=None, newline=True, end=None):
             get_logger().warning(msg)
         elif level == 'error':
             safePrint(Fore.RED + f"{msg}" + Style.RESET_ALL, newline, end)
-            if exception is None:
+            if exception is None or not isinstance(exception, Exception) or exception.__traceback__ is None:
                 get_logger().error(msg)
             else:
-                get_logger().error(msg, exception)
-            get_logger().error(traceback.format_exc())
+                get_logger().error(msg)
+                # get_logger().exception(exception)
+                get_logger().error(traceback.format_exc())
         elif level is None:
             safePrint(msg, newline, end)
 
@@ -764,6 +765,7 @@ def download_image(url, filename, res, file_size, overwrite):
         save = open(filename + '.pixiv', 'wb+', 4096)
     except IOError as ex:
         print_and_log('error', f"Error at download_image(): Cannot save {url} to {filename}: {sys.exc_info()}", exception=ex)
+        input("Press enter to continue or Ctrl+C to abort.")  # Issue #1187
 
         # get the actual server filename and use it as the filename for saving to current app dir
         filename = os.path.split(url)[1]
@@ -794,6 +796,10 @@ def download_image(url, filename, res, file_size, overwrite):
                 break
 
             prev = curr
+    except OSError as ex:
+        print_and_log('error', f"Error at download_image(): Cannot save {url} to {filename}: {sys.exc_info()}", exception=ex)
+        input("Press enter to continue or Ctrl+C to abort.")  # Issue #1187
+        raise
 
     finally:
         if save is not None:
@@ -967,7 +973,7 @@ def ugoira2gif(ugoira_file, exportname, fmt='gif', image=None):
     print_and_log('info', 'Processing ugoira to animated gif...')
     # Issue #802 use ffmpeg to convert to gif
     if len(_config.gifParam) == 0:
-        _config.gifParam = "-filter_complex [0:v]split[a][b];[a]palettegen=stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=5:diff_mode=rectangle"
+        _config.gifParam = "-filter_complex [0:v]split[a][b];[a]palettegen=stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=5:diff_mode=rectangle -vsync 0"
     convert_ugoira(ugoira_file,
                    exportname,
                    ffmpeg=_config.ffmpeg,
@@ -981,7 +987,7 @@ def ugoira2apng(ugoira_file, exportname, image=None):
     print_and_log('info', 'Processing ugoira to apng...')
     # fix #796 convert apng using ffmpeg
     if len(_config.apngParam) == 0:
-        _config.apngParam = "-vf setpts=PTS-STARTPTS,hqdn3d=1.5:1.5:6:6 -plays 0"
+        _config.apngParam = "-plays 0 -vsync 0"
     convert_ugoira(ugoira_file,
                    exportname,
                    ffmpeg=_config.ffmpeg,
@@ -994,7 +1000,7 @@ def ugoira2apng(ugoira_file, exportname, image=None):
 def ugoira2webp(ugoira_file, exportname, image=None):
     print_and_log('info', 'Processing ugoira to webp...')
     if len(_config.webpParam) == 0:
-        _config.webpParam = "-lossless 0 -q:v 90 -loop 0 -vsync 2 -r 999"
+        _config.webpParam = "-lossless 0 -compression_level 5 -quality 100 -loop 0 -vsync 0"
     convert_ugoira(ugoira_file,
                    exportname,
                    ffmpeg=_config.ffmpeg,
@@ -1007,7 +1013,7 @@ def ugoira2webp(ugoira_file, exportname, image=None):
 def ugoira2webm(ugoira_file, exportname, codec="libvpx-vp9", extension="webm", image=None):
     print_and_log('info', 'Processing ugoira to webm...')
     if len(_config.ffmpegParam) == 0:
-        _config.ffmpegParam = "-vsync 2 -r 999 -pix_fmt yuv420p"
+        _config.ffmpegParam = "-lossless 0 -crf 15 -b 0 -vsync 0"
     convert_ugoira(ugoira_file,
                    exportname,
                    ffmpeg=_config.ffmpeg,
@@ -1066,8 +1072,10 @@ def convert_ugoira(ugoira_file, exportname, ffmpeg, codec, param, extension, ima
         p = ffmpeg_progress_report(p)
         ret = p.wait()
 
-        if(p.returncode != 0):
-            print_and_log("error", f"Failed when converting image using {cmd} ==> ffmpeg return exit code={p.returncode}, expected to return 0.")
+        if (p.returncode != 0):
+            msg = f"Failed when converting image using {cmd} ==> ffmpeg return exit code={p.returncode}, expected to return 0."
+            print_and_log("error", msg)
+            raise PixivException(msg, errorCode=PixivException.UGOIRA_CONVERSION_ERROR)  # Issue #1176
         else:
             print_and_log("info", f"- Done with status = {ret}")
             shutil.move(tempname, exportname)
@@ -1166,7 +1174,7 @@ def check_image_encoding(directory: str) -> None:
             for file in dict_of_components[i - 1]:
                 re_encode_image(re_encode_channel, file)
 
-        if (len(dict_of_components[i - 1]) != 0) and not(re_encode):
+        if (len(dict_of_components[i - 1]) != 0) and not (re_encode):
             re_encode = True
             re_encode_channel = i - 1
 
@@ -1194,7 +1202,7 @@ def re_encode_image(nb_channel: int, im_path: str) -> None:
     p = ffmpeg_progress_report(p)
     p.wait()
 
-    if(p.returncode != 0):
+    if (p.returncode != 0):
         raise PixivException("error", f"Failed when converting image using {cmd} ==> ffmpeg return exit code={p.returncode}, expected to return 0.", errorCode=PixivException.OTHER_ERROR)
 
     if os.path.exists(im_path) and os.path.exists(temp_name):

@@ -152,7 +152,7 @@ class PixivImage (object):
                 self.artist = PixivArtist(temp_artist_id, page, fromImage=True)
 
             if fromBookmark and self.originalArtist is None:
-                assert(self.artist is not None)
+                assert (self.artist is not None)
                 self.originalArtist = PixivArtist(page=page, fromImage=True)
                 print("From Artist Bookmark: {0}".format(self.artist.artistId))
                 print("Original Artist: {0}".format(self.originalArtist.artistId))
@@ -164,7 +164,7 @@ class PixivImage (object):
 
     def ParseInfo(self, page, writeRawJSON):
         key = list(page["illust"].keys())[0]
-        assert(str(key) == str(self.imageId))
+        assert (str(key) == str(self.imageId))
         root = page["illust"][key]
         # save the JSON if writeRawJSON is enabled
         if writeRawJSON:
@@ -254,7 +254,10 @@ class PixivImage (object):
 
         # Strip HTML tags from caption once they have been collected by the above statement.
         if self.stripHTMLTagsFromCaption:
-            self.imageCaption = BeautifulSoup(self.imageCaption, features="html5lib").text
+            caption_element = BeautifulSoup(self.imageCaption, features="html5lib")
+            self.imageCaption = caption_element.text
+            caption_element.decompose()
+            del caption_element
 
         # Issue #1064
         if "titleCaptionTranslation" in root:
@@ -268,7 +271,10 @@ class PixivImage (object):
                 self.translated_work_caption = root["titleCaptionTranslation"]["workCaption"]
                 self.parse_url_from_caption(self.translated_work_caption)
                 if self.stripHTMLTagsFromCaption:
-                    self.translated_work_caption = BeautifulSoup(self.translated_work_caption, features="html5lib").text
+                    caption_element = BeautifulSoup(self.translated_work_caption, features="html5lib")
+                    self.translated_work_caption = caption_element.text
+                    caption_element.decompose()
+                    del caption_element
 
     def parse_url_from_caption(self, caption_to_parse):
         parsed = BeautifulSoup(caption_to_parse, features="html5lib")
@@ -300,7 +306,7 @@ class PixivImage (object):
         # need to be minified
         self.ugoira_data = json.dumps(js, separators=(',', ':'))  # ).replace("/", r"\/")
 
-        assert(len(self.ugoira_data) > 0)
+        assert (len(self.ugoira_data) > 0)
         return js["src"]
 
     def IsNotLoggedIn(self, page):

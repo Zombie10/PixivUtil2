@@ -141,6 +141,20 @@ def process_image(caller,
                         result = PixivConstant.PIXIVUTIL_SKIP_BLACKLIST
                         break
 
+            # Issue #439
+            if config.r18Type == 1 and download_image_flag:
+                # only download R18 if r18Type = 1
+                if 'R-18G' in (tag.upper() for tag in image.imageTags):
+                    PixivHelper.print_and_log('warn', f'Skipping image_id: {image_id} because it has R-18G tag.')
+                    download_image_flag = False
+                    result = PixivConstant.PIXIVUTIL_SKIP_BLACKLIST
+            elif config.r18Type == 2 and download_image_flag:
+                # only download R18G if r18Type = 2
+                if 'R-18' in (tag.upper() for tag in image.imageTags):
+                    PixivHelper.print_and_log('warn', f'Skipping image_id: {image_id} because it has R-18 tag.')
+                    download_image_flag = False
+                    result = PixivConstant.PIXIVUTIL_SKIP_BLACKLIST
+
             if config.useBlacklistTitles and download_image_flag:
                 if config.useBlacklistTitlesRegex:
                     for item in caller.__blacklistTitles:
@@ -281,17 +295,17 @@ def process_image(caller,
                         if image.imageMode == 'manga':
                             filename_info_format = config.filenameMangaInfoFormat or config.filenameMangaFormat or filename_info_format
                         info_filename = PixivHelper.make_filename(filename_info_format,
-                                                                image,
-                                                                tagsSeparator=config.tagsSeparator,
-                                                                tagsLimit=config.tagsLimit,
-                                                                fileUrl=url,
-                                                                appendExtension=False,
-                                                                bookmark=bookmark,
-                                                                searchTags=search_tags,
-                                                                useTranslatedTag=config.useTranslatedTag,
-                                                                tagTranslationLocale=config.tagTranslationLocale)
-                        info_filename = PixivHelper.sanitize_filename(info_filename, target_dir)
-                        image.WriteXMP(info_filename + ".xmp")
+                                                                    image,
+                                                                    tagsSeparator=config.tagsSeparator,
+                                                                    tagsLimit=config.tagsLimit,
+                                                                    fileUrl=url,
+                                                                    appendExtension=False,
+                                                                    bookmark=bookmark,
+                                                                    searchTags=search_tags,
+                                                                    useTranslatedTag=config.useTranslatedTag,
+                                                                    tagTranslationLocale=config.tagTranslationLocale)
+                        info_filename = PixivHelper.sanitize_filename(info_filename + ".xmp", target_dir)
+                        image.WriteXMP(info_filename)
 
             if config.writeImageInfo or config.writeImageJSON or config.writeImageXMP:
                 filename_info_format = config.filenameInfoFormat or config.filenameFormat
@@ -308,25 +322,25 @@ def process_image(caller,
                                                           searchTags=search_tags,
                                                           useTranslatedTag=config.useTranslatedTag,
                                                           tagTranslationLocale=config.tagTranslationLocale)
-                info_filename = PixivHelper.sanitize_filename(info_filename, target_dir)
                 # trim _pXXX
                 info_filename = re.sub(r'_p?\d+$', '', info_filename)
+                info_filename = PixivHelper.sanitize_filename(info_filename + ".infoext", target_dir)
                 if config.writeImageInfo:
-                    image.WriteInfo(info_filename + ".txt")
+                    image.WriteInfo(info_filename[:-8] + ".txt")
                 if config.writeImageJSON:
-                    image.WriteJSON(info_filename + ".json", config.RawJSONFilter)
+                    image.WriteJSON(info_filename[:-8] + ".json", config.RawJSONFilter)
                 if config.includeSeriesJSON and image.seriesNavData and image.seriesNavData['seriesId'] not in caller.__seriesDownloaded:
                     json_filename = PixivHelper.make_filename(config.filenameSeriesJSON,
                                                               image,
                                                               fileUrl=url,
                                                               appendExtension=False
                                                               )
-                    json_filename = PixivHelper.sanitize_filename(json_filename, target_dir)
                     # trim _pXXX
                     json_filename = re.sub(r'_p?\d+$', '', json_filename)
-                    image.WriteSeriesData(image.seriesNavData['seriesId'], caller.__seriesDownloaded, json_filename + ".json")
+                    json_filename = PixivHelper.sanitize_filename(json_filename + ".json", target_dir)
+                    image.WriteSeriesData(image.seriesNavData['seriesId'], caller.__seriesDownloaded, json_filename)
                 if config.writeImageXMP and not config.writeImageXMPPerImage:
-                    image.WriteXMP(info_filename + ".xmp")
+                    image.WriteXMP(info_filename[:-8] + ".xmp")
 
             if image.imageMode == 'ugoira_view':
                 if config.writeUgoiraInfo:
@@ -469,7 +483,7 @@ def process_ugoira_local(caller, config):
                         if os.path.isfile(os.path.join(zip_dir, file)) and zip_name in file:
                             file_basename = os.path.basename(file)
                             file_ext = os.path.splitext(file_basename)[1]
-                            if((("gif" in file_ext) and (config.createGif))
+                            if ((("gif" in file_ext) and (config.createGif))
                                or (("png" in file_ext) and (config.createApng))
                                or (("webm" in file_ext) and (config.createWebm))
                                or (("webp" in file_ext) and (config.createWebp))
@@ -527,12 +541,12 @@ def process_ugoira_local(caller, config):
                     for file_name in os.listdir(d):
                         file_ext = os.path.splitext(file_name)[1]
                         if file_name not in list_file_zipdir and config.backupOldFile:
-                            if((config.createUgoira and not config.deleteUgoira and "ugoira" in file_ext)
-                              or (not config.deleteZipFile and "zip" in file_ext)
-                              or (config.createGif and "gif" in file_ext)
-                              or (config.createApng and "png" in file_ext)
-                              or (config.createWebm and "webm" in file_ext)
-                              or (config.createWebp and "webp" in file_ext)):
+                            if ((config.createUgoira and not config.deleteUgoira and "ugoira" in file_ext)
+                                 or (not config.deleteZipFile and "zip" in file_ext)
+                                 or (config.createGif and "gif" in file_ext)
+                                 or (config.createApng and "png" in file_ext)
+                                 or (config.createWebm and "webm" in file_ext)
+                                 or (config.createWebp and "webp" in file_ext)):
                                 split_name = file_name.rsplit(".", 1)
                                 new_name = file_name + "." + str(int(time.time()))
                                 if len(split_name) == 2:
