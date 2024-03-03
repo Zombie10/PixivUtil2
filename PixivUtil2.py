@@ -397,8 +397,8 @@ def menu_download_by_tags(opisvalid, args, options):
             else:
                 print("Valid values are 'a', 'i', or 'm'.")
 
-        if bookmark_count is not None and len(bookmark_count) > 0:
-            bookmark_count = int(bookmark_count)
+    if bookmark_count is not None and len(bookmark_count) > 0:
+        bookmark_count = int(bookmark_count)
 
     PixivTagsHandler.process_tags(sys.modules[__name__],
                                   __config__,
@@ -530,8 +530,8 @@ def menu_download_from_online_user_bookmark(opisvalid, args, options):
         (start_page, end_page) = PixivHelper.get_start_and_end_number(total_number_of_page=options.number_of_pages)
         bookmark_count = input('Bookmark Count: ').rstrip("\r") or None
 
-        if bookmark_count is not None and len(bookmark_count) > 0:
-            bookmark_count = int(bookmark_count)
+    if bookmark_count is not None and len(bookmark_count) > 0:
+        bookmark_count = int(bookmark_count)
 
     PixivBookmarkHandler.process_bookmark(sys.modules[__name__],
                                           __config__,
@@ -621,8 +621,8 @@ def menu_download_from_tags_list(opisvalid, args, options):
         (page, end_page) = PixivHelper.get_start_and_end_number(total_number_of_page=options.number_of_pages)
         (start_date, end_date) = PixivHelper.get_start_and_end_date()
 
-        if bookmark_count is not None and len(bookmark_count) > 0:
-            bookmark_count = int(bookmark_count)
+    if bookmark_count is not None and len(bookmark_count) > 0:
+        bookmark_count = int(bookmark_count)
 
     PixivListHandler.process_tags_list(sys.modules[__name__],
                                        __config__,
@@ -647,8 +647,8 @@ def menu_download_new_illust_from_bookmark(opisvalid, args, options):
         (page_num, end_page_num) = PixivHelper.get_start_and_end_number(total_number_of_page=options.number_of_pages)
         bookmark_count = input('Bookmark Count: ').rstrip("\r") or None
 
-        if bookmark_count is not None and len(bookmark_count) > 0:
-            bookmark_count = int(bookmark_count)
+    if bookmark_count is not None and len(bookmark_count) > 0:
+        bookmark_count = int(bookmark_count)
 
     PixivBookmarkHandler.process_new_illust_from_bookmark(sys.modules[__name__],
                                                           __config__,
@@ -741,9 +741,9 @@ def menu_download_by_group_id(opisvalid, args, options):
 
 def menu_ugoira_reencode(opisvalid, args, options):
     __log__.info('Re-encode Ugoira (u)')
-    msg = Fore.YELLOW + Style.NORMAL + f'WARNING: THIS ACTION CANNOT BE UNDO !' + Style.RESET_ALL
+    msg = Fore.YELLOW + Style.NORMAL + 'WARNING: THIS ACTION CANNOT BE UNDO !' + Style.RESET_ALL
     PixivHelper.print_and_log(None, msg)
-    msg = Fore.YELLOW + Style.NORMAL + f'You are about to re-encode and overwrite all of your stored ugoira and its related files (gif, webm ...).' + Style.RESET_ALL
+    msg = Fore.YELLOW + Style.NORMAL + 'You are about to re-encode and overwrite all of your stored ugoira and its related files (gif, webm ...).' + Style.RESET_ALL
     PixivHelper.print_and_log(None, msg)
     arg = input(Fore.YELLOW + Style.BRIGHT + 'Do you really want to proceed ? [y/n, default is no]: ' + Style.RESET_ALL).rstrip("\r") or 'n'
     sure = arg.lower()
@@ -1769,7 +1769,9 @@ def main():
         if __config__.useLocalTimezone:
             PixivHelper.print_and_log("info", f"Using local timezone: {PixivHelper.LocalUTCOffsetTimezone()}")
 
-        print("Username login is broken, use cookie to log in.")
+        print(Fore.RED + Style.BRIGHT + "Username login is broken, use Cookies to log in." + Style.RESET_ALL)
+        print(Fore.YELLOW + Style.BRIGHT + "See Q3. at " + Style.RESET_ALL +
+              Fore.CYAN + Style.BRIGHT + "https://github.com/Nandaka/PixivUtil2?tab=readme-ov-file#a-usage" + Style.RESET_ALL)
 
         username = __config__.username
         # if username == '':
