@@ -57,8 +57,7 @@ class PixivConfig():
     __items = [
         ConfigItem("Network", "useProxy", False),
         ConfigItem("Network", "proxyAddress", ""),
-        ConfigItem("Network", "useragent",
-                   "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/115.0"),
+        ConfigItem("Network", "useragent", "Mozilla/5.0"),
         ConfigItem("Network", "useRobots", True),
         ConfigItem("Network", "timeout", 60),
         ConfigItem("Network", "retry", 3),
@@ -188,6 +187,8 @@ class PixivConfig():
         ConfigItem("FFmpeg", "gifParam",
                    "-filter_complex [0:v]split[a][b];[a]palettegen=stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=5:diff_mode=rectangle -vsync 0"),
         ConfigItem("FFmpeg", "apngParam", "-plays 0 -vsync 0"),
+        ConfigItem("FFmpeg", "avifCodec", "libaom-av1"),
+        ConfigItem("FFmpeg", "avifParam", "-cpu-used 4 -crf 0 -row-mt 1 -tile-columns 2 -tile-rows 2 -vsync 0"),
         ConfigItem("FFmpeg", "verboseOutput", False),
 
         ConfigItem("Ugoira", "writeUgoiraInfo", False),
@@ -197,6 +198,7 @@ class PixivConfig():
         ConfigItem("Ugoira", "createWebp", False),
         ConfigItem("Ugoira", "createGif", False),
         ConfigItem("Ugoira", "createApng", False),
+        ConfigItem("Ugoira", "createAvif", False),
         ConfigItem("Ugoira", "deleteUgoira", False),
         ConfigItem("Ugoira", "deleteZipFile", False),
 
