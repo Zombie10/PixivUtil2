@@ -9,6 +9,7 @@ import re
 import subprocess
 import sys
 import traceback
+import pyperclip
 from optparse import OptionParser
 
 import colorama
@@ -194,6 +195,7 @@ def menu():
     print(' e. Export online followed artist.')
     print(' m. Export online other\'s followed artist.')
     print(' p. Export online image bookmarks.')
+    print(' z. Export userId bookmarks.')
     print(' i. Import list file')
     print(' u. Ugoira re-encode')
     print(' r. Reload config.ini')
@@ -1333,6 +1335,92 @@ def menu_print_config():
     __log__.info('Print Current Config (p).')
     __config__.printConfig()
 
+def menu_export_userId_bookmark(opisvalid, args, options):
+    __log__.info("Export User's Bookmark mode (z).")
+
+    # === Parámetro --b para páginas de bookmarks ===
+    bookmark_pages = __config__.numberOfPage
+    if opisvalid and hasattr(options, 'bookmark_pages') and options.bookmark_pages is not None:
+        bookmark_pages = int(options.bookmark_pages)
+
+    start_page = 1
+    end_page = bookmark_pages            # ←←← Esto es lo que controla --b
+    hide = 'n'                           # siempre sin bookmarks privados
+    tag = ''
+    use_image_tag = False
+    filename = "Exported_userId_bookmark.txt"
+    copy_clipboard = True                # siempre copiar al portapapeles
+    donwload_userId_bookmark = True      # siempre descargar desde clipboard
+
+    if opisvalid:
+        if len(args) > 0:
+            tag = args[0]
+        #(start_page, end_page) = get_start_and_end_page_from_options(options)
+        if options.bookmark_flag is not None:
+            hide = options.bookmark_flag.lower()
+            if hide not in ('y', 'n', 'o'):
+                PixivHelper.print_and_log("error", f"Invalid args for bookmark_flag: {options.bookmark_flag}, valid values are [y/n/o].")
+                return
+        use_image_tag = options.use_image_tag
+        if options.export_filename is not None:
+            filename = options.export_filename
+
+    PixivBookmarkHandler.export_userId_bookmark(sys.modules[__name__],
+                                                __config__,
+                                                hide=hide,
+                                                start_page=start_page,
+                                                end_page=end_page,
+                                                tag=tag,
+                                                use_image_tag=use_image_tag,
+                                                filename=filename,
+                                                copy_clipboard=copy_clipboard)
+    
+    if donwload_userId_bookmark:
+        paste_clipboard_download_by_member_id(opisvalid, args, options)
+
+def paste_clipboard_download_by_member_id(opisvalid, args, options):
+    __log__.info('Member id mode from clipboard (z → download).')
+    current_member = 1
+    include_sketch = False   # siempre False (no se pregunta)
+
+    # Usar valores de línea de comandos si existen, sino preguntar
+    if opisvalid:
+        start_page = int(options.start_page) if options.start_page else 1
+        end_page = int(options.end_page) if options.end_page else __config__.numberOfPage
+    else:
+        try:
+            start_page = int(input('Start Page (default=1): ').rstrip("\r") or "1")
+        except ValueError:
+            start_page = 1
+
+        end_page = __config__.numberOfPage
+        try:
+            end_input = input(f'End Page (default= {end_page}, 0 for no limit): ').rstrip("\r")
+            if end_input:
+                end_page = int(end_input)
+        except ValueError:
+            pass
+
+    member_ids = PixivHelper.get_ids_from_csv(pyperclip.paste())
+    PixivHelper.print_and_log('info', f"Member IDs: {member_ids}")
+
+    for member_id in member_ids:
+        try:
+            prefix = f"[{current_member} of {len(member_ids)}] "
+            PixivArtistHandler.process_member(sys.modules[__name__],
+                                              __config__,
+                                              member_id,
+                                              page=start_page,
+                                              end_page=end_page,
+                                              title_prefix=prefix)
+
+            current_member = current_member + 1
+        except PixivException as ex:
+            PixivHelper.print_and_log('error', f"Member ID: {member_id} is not valid")
+            global ERROR_CODE
+            ERROR_CODE = -1
+            continue
+    print("\n✅ Download completed.")
 
 def set_console_title(title=''):
     set_title = f'PixivDownloader {PixivConstant.PIXIVUTIL_VERSION} {title}'
@@ -1345,7 +1433,7 @@ def setup_option_parser():
     __valid_options = ('1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14', '15', '16', '17', '18', '19', 'm1', 'm2', 'm3', 'm4',
                        'f1', 'f2', 'f3', 'f4', 'f5',
                        's1', 's2',
-                       'l', 'd', 'e', 'm', 'b', 'p', 'c')
+                       'l', 'd', 'e', 'm', 'b', 'p', 'c', 'z')
     parser = OptionParser()
 
     # need to keep the whitespace to adjust the output for --help
@@ -1396,6 +1484,9 @@ d  - Manage database''')
     parser.add_option('-c', '--config', dest='configlocation',
                       default=None,
                       help='Load the config file from a custom location')
+    parser.add_option('-z', '--userId_bookmark', dest='userId_bookmark',
+                      default=None,
+                      help='Load the userId from your bookmark')
     parser.add_option('--bf', '--batch_file',
                       dest='batch_file',
                       default=None,
@@ -1414,6 +1505,10 @@ number of page instead (start page + end page).
 This take priority from '-n', '--number_of_pages' for calculation.
 Used in option 1, 3, 5, 6, 7, 8, 9, and 10.
 See get_start_and_end_page_from_options()''')
+    parser.add_option('--b', '--bookmark_pages',
+                      dest='bookmark_pages',
+                      default=None,
+                      help='Number of bookmark pages to export (used with -s z). Overrides config.ini')
     parser.add_option('--is', '--include_sketch',
                       dest='include_sketch',
                       default=False,
@@ -1602,6 +1697,8 @@ def main_loop(ewd, op_is_valid, selection, np_is_valid_local, args, options):
                 menu_reload_config()
             elif selection == 'c':
                 menu_print_config()
+            elif selection == 'z':
+                menu_export_userId_bookmark(op_is_valid, args, options)
             elif selection == 'i':
                 menu_import_list()
 

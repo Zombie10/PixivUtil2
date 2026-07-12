@@ -14,6 +14,13 @@ import common.PixivHelper as PixivHelper
 
 script_path = PixivHelper.module_path()
 
+FANBOX_BROWSER_MANAGED_OPTIONS = {
+    "cookieFanbox",
+    "cookieFanboxTemp",
+    "cf_clearance",
+    "cf_bm",
+}
+
 
 def stringNotEmpty(value):
     return value is not None and len(value) > 0
@@ -145,6 +152,8 @@ class PixivConfig():
         ConfigItem("Authentication", "username", ""),
         ConfigItem("Authentication", "password", ""),
         ConfigItem("Authentication", "cookie", ""),
+        ConfigItem("Authentication", "cookieFanboxFromBrowser", True),
+        ConfigItem("Authentication", "firefoxProfilePath", ""),
         ConfigItem("Authentication", "cookieFanbox", ""),
         ConfigItem("Authentication", "cookieFanboxTemp", ""),
         ConfigItem("Authentication", "refresh_token", ""),
@@ -288,7 +297,6 @@ class PixivConfig():
                 try:
                     value = method(item.section, item.option)
                 except (configparser.NoSectionError, configparser.NoOptionError):
-                    haveError = True
                     for section in config.sections():
                         try:
                             value = method(section, item.option)
@@ -298,9 +306,14 @@ class PixivConfig():
                     if value is None:
                         raise
             except BaseException:
-                print(item.option, "=", item.default)
                 value = item.default
-                haveError = True
+                skip_managed = (
+                    item.option in FANBOX_BROWSER_MANAGED_OPTIONS
+                    and getattr(self, "cookieFanboxFromBrowser", True)
+                )
+                if not skip_managed:
+                    print(item.option, "=", item.default)
+                    haveError = True
 
             # Issue #743
             try:
@@ -330,9 +343,12 @@ class PixivConfig():
 
         groups = itertools.groupby(PixivConfig.__items, lambda x: x.section)
 
+        skip_fanbox_managed = bool(self.__getattribute__("cookieFanboxFromBrowser"))
         for k, g in groups:
             config.add_section(k)
             for item in g:
+                if skip_fanbox_managed and item.option in FANBOX_BROWSER_MANAGED_OPTIONS:
+                    continue
                 config.set(item.section, item.option, self.__getattribute__(item.option))
 
         if path is not None:

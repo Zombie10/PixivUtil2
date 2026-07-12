@@ -21,6 +21,7 @@ from bs4 import BeautifulSoup
 from colorama import Fore, Style
 import curl_cffi
 
+import common.FirefoxCookieReader as FirefoxCookieReader
 import common.PixivHelper as PixivHelper
 from model.PixivArtist import PixivArtist
 from model.PixivBookmark import PixivNewIllustBookmark
@@ -419,10 +420,75 @@ class PixivBrowser(mechanize.Browser):
 
         return result
 
+    def _use_browser_fanbox_cookies(self):
+        return bool(getattr(self._config, "cookieFanboxFromBrowser", True))
+
+    def _get_firefox_profile_path(self):
+        return getattr(self._config, "firefoxProfilePath", "") or ""
+
+    def _get_fanbox_cookies_from_browser(self, force_refresh=False):
+        if not self._use_browser_fanbox_cookies():
+            return {}
+
+        try:
+            cookies = FirefoxCookieReader.get_fanbox_cookies(
+                profile_override=self._get_firefox_profile_path(),
+                force_refresh=force_refresh,
+            )
+            if cookies:
+                PixivHelper.get_logger().debug(
+                    "Loaded %s FANBOX cookies from Firefox profile %s",
+                    len(cookies),
+                    FirefoxCookieReader.get_cached_profile_path(),
+                )
+            return cookies
+        except BaseException:
+            PixivHelper.get_logger().warning(
+                "Failed to read FANBOX cookies from Firefox: %s", sys.exc_info()
+            )
+            return {}
+
+    def _sync_fanbox_auth_from_browser(self, cookies):
+        if not cookies:
+            return None
+
+        fanbox_sessid = cookies.get("FANBOXSESSID")
+        if cookies.get("cf_clearance"):
+            self._config.cf_clearance = cookies["cf_clearance"]
+        if cookies.get("__cf_bm"):
+            self._config.cf_bm = cookies["__cf_bm"]
+        if fanbox_sessid:
+            self._config.cookieFanbox = fanbox_sessid
+            if not self._use_browser_fanbox_cookies():
+                self._config.cookieFanboxTemp = FirefoxCookieReader.build_cookie_header(cookies)
+        return fanbox_sessid
+
+    def _get_fanbox_cookie_header(self, force_refresh=False):
+        if self._use_browser_fanbox_cookies():
+            header = FirefoxCookieReader.get_fanbox_cookie_header(
+                profile_override=self._get_firefox_profile_path(),
+                force_refresh=force_refresh,
+            )
+            if header:
+                return header
+
+        if self._config.cookieFanboxTemp:
+            return self._config.cookieFanboxTemp
+        if self._config.cookieFanbox:
+            return f"FANBOXSESSID={self._config.cookieFanbox}"
+        return ""
+
     def fanboxLoginUsingCookie(self, login_cookie=None):
         """  Log in to Pixiv using saved cookie, return True if success """
         result = False
         parsed = ""
+        browser_cookies = self._get_fanbox_cookies_from_browser()
+        if browser_cookies:
+            PixivHelper.print_and_log("info", "Using FANBOX cookies from Firefox")
+            browser_login_cookie = self._sync_fanbox_auth_from_browser(browser_cookies)
+            if browser_login_cookie:
+                login_cookie = browser_login_cookie
+
         if login_cookie is None or len(login_cookie) == 0:
             login_cookie = self._config.cookieFanbox
 
@@ -529,7 +595,8 @@ class PixivBrowser(mechanize.Browser):
                     PixivHelper.print_and_log(
                         'info', 'New FANBOX cookie value: ' + str(cookie.value))
                     self._config.cookieFanbox = cookie.value
-                    self._config.writeConfig(path=self._config.configFileLocation)
+                    if not self._use_browser_fanbox_cookies():
+                        self._config.writeConfig(path=self._config.configFileLocation)
                     break
         else:
             PixivHelper.print_and_log('info', 'Could not update FANBOX cookie string.')
@@ -773,27 +840,28 @@ class PixivBrowser(mechanize.Browser):
                     res.close()
                     info = json.loads(infoStr)
                     self._put_to_cache(url, info)
-            else:
-                PixivHelper.print_and_log('info', f'Using OAuth to retrieve member info for: {member_id}')
-                if not self._username or not self._password:
-                    raise PixivException("Empty Username or Password, remove cookie value and relogin, or add username/password to config.ini.")
-
-                url = f'https://app-api.pixiv.net/v1/user/detail?user_id={member_id}'
-                info = self._get_from_cache(url)
-                if info is None:
-                    PixivHelper.get_logger().debug("Getting member information: %s", member_id)
-                    login_response = self._oauth_manager.login()
-                    if login_response.status_code == 200:
-                        info = json.loads(login_response.text)
-                        if self._config.refresh_token != info["response"]["refresh_token"]:
-                            PixivHelper.print_and_log('info', 'OAuth Refresh Token is updated, updating config.ini')
-                            self._config.refresh_token = info["response"]["refresh_token"]
-                            self._config.writeConfig(path=self._config.configFileLocation)
-
-                    response = self._oauth_manager.get_user_info(member_id)
-                    info = json.loads(response.text)
-                    self._put_to_cache(url, info)
-                    PixivHelper.get_logger().debug("reply: %s", response.text)
+             # TODO: Find substitution for artists without images.
+#            else:
+#                PixivHelper.print_and_log('info', f'Using OAuth to retrieve member info for: {member_id}')
+#                if not self._username or not self._password:
+#                    raise PixivException("Empty Username or Password, remove cookie value and relogin, or add username/password to config.ini.")
+#
+#                url = f'https://app-api.pixiv.net/v1/user/detail?user_id={member_id}'
+#                info = self._get_from_cache(url)
+#                if info is None:
+#                    PixivHelper.get_logger().debug("Getting member information: %s", member_id)
+#                    login_response = self._oauth_manager.login()
+#                    if login_response.status_code == 200:
+#                        info = json.loads(login_response.text)
+#                        if self._config.refresh_token != info["response"]["refresh_token"]:
+#                            PixivHelper.print_and_log('info', 'OAuth Refresh Token is updated, updating config.ini')
+#                            self._config.refresh_token = info["response"]["refresh_token"]
+#                            self._config.writeConfig(path=self._config.configFileLocation)
+#
+#                    response = self._oauth_manager.get_user_info(member_id)
+#                    info = json.loads(response.text)
+#                    self._put_to_cache(url, info)
+#                    PixivHelper.get_logger().debug("reply: %s", response.text)
 
             artist.ParseInfo(info, False, bookmark=bookmark)
 
@@ -1167,18 +1235,29 @@ class PixivBrowser(mechanize.Browser):
         p_req.add_header('Referer', p_referer)
         p_req.add_header('Origin', 'https://www.fanbox.cc')
         p_req.add_header('User-Agent', self._config.useragent)
-        p_req.add_header('Cookie', self._config.cookieFanboxTemp)
         impersonation = self._config.userAgentImpersonation or "firefox135" # default value
 
-        try:
-            p_res = curl_cffi.get(p_url, impersonate=impersonation, headers=p_req.headers)
-        except HTTPError as ex:
-            if ex.code in [404]:
-                raise PixivException("Fanbox post not found!", PixivException.OTHER_ERROR)
-            raise
-        p_response = p_res.text
-        PixivHelper.get_logger().debug(p_response)
-        p_res.close()
+        p_response = None
+        for attempt in range(2):
+            p_req.add_header('Cookie', self._get_fanbox_cookie_header(force_refresh=attempt > 0))
+            try:
+                p_res = curl_cffi.get(p_url, impersonate=impersonation, headers=p_req.headers)
+            except HTTPError as ex:
+                if ex.code in [404]:
+                    raise PixivException("Fanbox post not found!", PixivException.OTHER_ERROR)
+                raise
+            p_response = p_res.text
+            PixivHelper.get_logger().debug(p_response)
+            p_res.close()
+            if p_response.lstrip().startswith("{"):
+                break
+            if attempt == 0 and self._use_browser_fanbox_cookies():
+                PixivHelper.print_and_log("info", "FANBOX API blocked, refreshing cookies from Firefox...")
+                browser_cookies = self._get_fanbox_cookies_from_browser(force_refresh=True)
+                self._sync_fanbox_auth_from_browser(browser_cookies)
+            else:
+                break
+
         js = demjson3.decode(p_response)
         return js
 

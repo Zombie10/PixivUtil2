@@ -158,21 +158,27 @@ def download_image(caller,
                             db_filename = row[2]
 
                     if db_filename is not None and os.path.isfile(db_filename):
-                        old_size = os.path.getsize(db_filename)
-                        # if file_size < 0:
-                        #     file_size = get_remote_filesize(url, referer)
-                        check_result = PixivHelper.check_file_exists(config, db_filename, remote_file_size, old_size)
-                        if check_result != PixivConstant.PIXIVUTIL_OK:
-                            ugo_name = None
-                            if db_filename.endswith(".zip"):
-                                ugo_name = filename[:-4] + ".ugoira"
-                                if config.createUgoira:
+                        # DB may still point at an older path (e.g. Fanbox post title/file id changed).
+                        if os.path.normpath(db_filename) != os.path.normpath(filename_save):
+                            PixivHelper.get_logger().debug(
+                                "DB filename differs from target, downloading to new path: %s => %s",
+                                db_filename, filename_save)
+                        else:
+                            old_size = os.path.getsize(db_filename)
+                            # if file_size < 0:
+                            #     file_size = get_remote_filesize(url, referer)
+                            check_result = PixivHelper.check_file_exists(config, db_filename, remote_file_size, old_size)
+                            if check_result != PixivConstant.PIXIVUTIL_OK:
+                                ugo_name = None
+                                if db_filename.endswith(".zip"):
+                                    ugo_name = filename[:-4] + ".ugoira"
+                                    if config.createUgoira:
+                                        handle_ugoira(image, db_filename, config, notifier)
+                                if db_filename.endswith(".ugoira"):
+                                    ugo_name = db_filename
                                     handle_ugoira(image, db_filename, config, notifier)
-                            if db_filename.endswith(".ugoira"):
-                                ugo_name = db_filename
-                                handle_ugoira(image, db_filename, config, notifier)
 
-                            return (check_result, db_filename)
+                                return (check_result, db_filename)
 
                 # actual download
                 notifier(type="DOWNLOAD", message=f"Start downloading {url} to {filename_save}")

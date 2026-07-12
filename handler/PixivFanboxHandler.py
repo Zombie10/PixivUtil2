@@ -37,9 +37,18 @@ def process_fanbox_artist_by_id(caller, config, artist_id, end_page, title_prefi
             else:
                 PixivHelper.print_and_log("warn", "Artist name or token found in FANBOX filename formats, but not in db.")
                 if name_flag:
-                    artist.artistName = input(f"Please input %artist% for {artist_id}: ").strip()
+                    if artist.artistName:
+                        PixivHelper.print_and_log("info", f"Using FANBOX artist name: {artist.artistName}")
+                    else:
+                        artist.artistName = input(f"Please input %artist% for {artist_id}: ").strip()
                 if token_flag:
-                    artist.artistToken = input(f"Please input %member_token% for {artist_id}: ").strip()
+                    if artist.artistToken:
+                        PixivHelper.print_and_log("info", f"Using FANBOX artist token: {artist.artistToken}")
+                    elif artist.creatorId:
+                        artist.artistToken = artist.creatorId
+                        PixivHelper.print_and_log("info", f"Using creatorId as member_token: {artist.artistToken}")
+                    else:
+                        artist.artistToken = input(f"Please input %member_token% for {artist_id}: ").strip()
 
     current_page = 1
     next_url = None

@@ -5,6 +5,7 @@ import codecs
 import collections
 import json
 import re
+import pyperclip
 from datetime import datetime
 
 from bs4 import BeautifulSoup
@@ -84,6 +85,24 @@ class PixivBookmark(object):
 
         return (imageList, total_images)
 
+    
+    @staticmethod
+    def parseUserIdBookmark(page, image_tags_filter=None):
+        total_userId = 0
+        imageList = list()
+
+        image_bookmark = json.loads(page)
+        total_userId = image_bookmark["body"]["total"]  # total bookmarks, won't be the same if image_tags_filter used.
+        for work in image_bookmark["body"]["works"]:
+            if "isAdContainer" in work and work["isAdContainer"]:
+                continue
+
+            if "userId" in work:
+                imageList.append(int(work["userId"]))
+
+        return (imageList, total_userId)
+    
+
     @staticmethod
     def exportList(lst, filename):
         if not filename.endswith('.txt'):
@@ -99,6 +118,22 @@ class PixivBookmark(object):
         writer.write('###END-OF-FILE###')
         writer.close()
 
+    
+    @staticmethod
+    def export_userId_bookmark_list(lst, filename):
+        if not filename.endswith('.txt'):
+            filename = filename + '.txt'
+        writer = codecs.open(filename, 'w', encoding='utf-8')
+        writer.write(f'###Export members date: {datetime.today()} ###\n')
+        for item in lst:
+            data = str(item)
+            writer.write(data)
+            writer.write(' ')
+        writer.write('\r\n')
+        writer.write('###END-OF-FILE###')
+        writer.close()
+
+
     @staticmethod
     def export_image_list(lst, filename):
         if not filename.endswith('.txt'):
@@ -111,6 +146,15 @@ class PixivBookmark(object):
             writer.write('\r\n')
         writer.write('###END-OF-FILE###')
         writer.close()
+
+
+    @staticmethod
+    def copy_clipboard_userId_bookmark_list(lst):
+        clipboard = ''
+        for item in lst:
+            userId = str(item)
+            clipboard = clipboard + str(userId) + " "
+        pyperclip.copy(clipboard)
 
 
 class PixivNewIllustBookmark(object):
