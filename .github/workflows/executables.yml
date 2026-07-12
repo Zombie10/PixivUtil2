@@ -1,0 +1,103 @@
+name: Executables
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 0 * * *' # Todos los días a medianoche UTC
+
+env:
+  DATE_FORMAT: "%Y.%m.%d"
+
+jobs:
+  build:
+    # Quita esta línea si quieres que se ejecute también en tu fork:
+    # if: github.repository == 'Zombie10/PixivUtil2'
+
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+
+    outputs:
+      SHA: ${{ steps.out.outputs.SHA }}
+      MSG: ${{ steps.out.outputs.MSG }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: "windows-latest"
+            architecture: "x64"
+            python-version: "3.14"
+            name-suffix: "win-x64"
+
+          - os: "macOS-latest"
+            architecture: "arm64"
+            python-version: "3.14"
+            name-suffix: "mac-arm64"
+
+          - os: "ubuntu-latest"
+            architecture: "x64"
+            python-version: "3.14"
+            name-suffix: "linux-x64"
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v6
+      with:
+        python-version: ${{ matrix.python-version }}
+        architecture: ${{ matrix.architecture }}
+
+    - name: Output Values
+      id: out
+      run: |
+        echo "SHA=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+        echo "MSG<<EOF" >> "$GITHUB_OUTPUT"
+        echo "PixivUtil2 daily build - $(date +$DATE_FORMAT)" >> "$GITHUB_OUTPUT"
+        echo "EOF" >> "$GITHUB_OUTPUT"
+
+    - name: Install dependencies
+      run: |
+        pip install -r requirements.txt
+        pip install pyinstaller
+
+    - name: Build executable with PyInstaller
+      run: |
+        pyinstaller --onefile \
+                    --name PixivUtil2 \
+                    --icon icon2.ico \
+                    --add-data "browsers.json:." \
+                    PixivUtil2.py
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: PixivUtil2-${{ matrix.os }}
+        path: dist/PixivUtil2*
+
+    # Job de release (se ejecuta después de todos los builds)
+  release:
+    needs: build
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+
+    - name: Release
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: daily-${{ env.DATE_FORMAT }}
+        name: "PixivUtil2 Daily Build ${{ env.DATE_FORMAT }}"
+        body: "Build automático del commit ${{ needs.build.outputs.SHA }}"
+        draft: false
+        prerelease: false
+        make_latest: true
+        files: |
+          PixivUtil2-*/PixivUtil2*
+          PixivUtil2-*/PixivUtil2.exe
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
