@@ -169,6 +169,7 @@ class PixivConfig():
         ConfigItem("Pixiv", "autoAddTag", False),
         ConfigItem("Pixiv", "autoAddCaption", False),
         ConfigItem("Pixiv", "autoAddSeries", False),
+        ConfigItem("Pixiv", "autoAddStats", False),
         ConfigItem("Pixiv", "aiDisplayFewer", False),
 
         ConfigItem("FANBOX", "filenameFormatFanboxCover",
