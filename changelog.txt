@@ -1,3 +1,9 @@
+20260713b (fork / Zombie10) — refactor wave 1
+- PixivDBManager: WAL/pragmas, ensure_column() schema upgrades, Exception instead of BaseException
+- AppContext + get_caller() so handlers are not passed sys.modules[__name__] at call sites
+- PixivUtil2: stop catching BaseException in menu/input paths
+- Docs: docs/REFACTORING.md roadmap for waves 2–3
+
 20260713 (fork / Zombie10)
 - FANBOX: continue after per-post and per-artist failures instead of aborting the whole batch
 - FANBOX: normalize post.info body.post wrappers and alternate supporting/following list shapes

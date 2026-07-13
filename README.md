@@ -3,7 +3,7 @@
 Download artworks from **Pixiv**, **FANBOX**, and **Sketch**.
 
 This repository is a fork of [Nandaka/PixivUtil2](https://github.com/Nandaka/PixivUtil2) with extra automation and reliability features.  
-**Fork docs:** [docs/FORK.md](docs/FORK.md)
+**Fork docs:** [docs/FORK.md](docs/FORK.md) · **Refactoring plan:** [docs/REFACTORING.md](docs/REFACTORING.md)
 
 ## Quick start (fork)
 
