@@ -27,7 +27,20 @@ PixivUtil2 grew for ~15 years as a CLI script. Refactors are applied in **waves*
 | Repository façade | `db/repositories.py` — `Member` / `Image` / `Fanbox` / `Sketch` over existing DB API |
 | Explicit handler context | FANBOX handler uses `Repositories.from_caller(caller)` |
 | Structured log limits | `PixivHelper.log_payload()` truncates large API bodies |
-| Browser seam | `common/browser/` re-exports `get_browser` (full split deferred safely) |
+| Browser seam | `common/browser/` + mixins (see Wave 2b below) |
+
+## Wave 2b — browser client split (done)
+
+| Item | Implementation |
+|------|----------------|
+| FANBOX methods | `common/browser/fanbox_client.py` → `FanboxClientMixin` |
+| Sketch methods | `common/browser/sketch_client.py` → `SketchClientMixin` |
+| Composition | `class PixivBrowser(FanboxClientMixin, SketchClientMixin, mechanize.Browser)` |
+| Public API | Unchanged: `getBrowser()` / `browser.fanboxGet*` / `sketch_*` |
+| Contract tests | `test/test_browser_clients.py` (MRO + method ownership + signatures) |
+| Cycle safety | `common.browser.get_browser` is lazy (no import cycle with factory) |
+
+`PixivBrowserFactory` dropped from ~1680 to ~1250 lines; FANBOX auth/API and Sketch live in dedicated modules.
 
 ## Wave 3 — done (partial, safe subset)
 
@@ -65,7 +78,7 @@ model/                 # response models
 
 ## Future waves (optional)
 
-1. Move FANBOX/Sketch HTTP methods from `PixivBrowserFactory` into `common/browser/fanbox.py` / `sketch.py` with the same public methods (behaviour-preserving cut/paste + tests).
+1. Extract remaining Pixiv core methods (member/image/tag) into `common/browser/pixiv_client.py` the same way.
 2. Handler signatures: `process_*(ctx: AppContext, config: PixivConfig, ...)` with type hints end-to-end.
 3. Optional `metadataWorkers` config (default 1) for parallel **metadata only**, never changing default download concurrency.
 4. Gradual mypy on `common/` and `cli/`.

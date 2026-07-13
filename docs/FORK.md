@@ -192,7 +192,7 @@ Set `checkUpdatedLimit*` to `0` only when you intentionally want a full re-scan.
 | `common/PixivJson.py` | stdlib JSON + demjson3 fallback |
 | `cli/` | Menus / option parser / main loop (split from entrypoint) |
 | `db/repositories.py` | Domain repos over PixivDBManager (no schema break) |
-| `common/browser/` | Stable import seam for the browser client |
+| `common/browser/` | `FanboxClientMixin` + `SketchClientMixin` composed into `PixivBrowser` |
 
 Architecture / waves: **[docs/REFACTORING.md](REFACTORING.md)**
 

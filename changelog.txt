@@ -1,3 +1,10 @@
+20260713d (fork / Zombie10) — browser client split
+- Extract FANBOX methods to common/browser/fanbox_client.py (FanboxClientMixin)
+- Extract Sketch methods to common/browser/sketch_client.py (SketchClientMixin)
+- PixivBrowser inherits mixins; public API unchanged (getBrowser / fanbox* / sketch*)
+- Contract tests: test/test_browser_clients.py
+- Lazy get_browser export avoids circular imports
+
 20260713c (fork / Zombie10) — refactor waves 2–3
 - Split CLI into cli/ package (menus, main_loop, option_parser) with cli.state.bind()
 - Thin PixivUtil2.py entrypoint (~400 lines) re-exporting menus for compatibility

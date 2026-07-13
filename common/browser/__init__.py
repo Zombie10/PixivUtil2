@@ -1,17 +1,29 @@
 # -*- coding: utf-8 -*-
 """
-Browser client package (Wave 2–3).
+Browser client package.
 
-Today ``PixivBrowser`` in ``common.PixivBrowserFactory`` remains the concrete
-implementation for Pixiv, FANBOX, and Sketch to avoid a risky behavioural split.
+``PixivBrowser`` composes domain mixins:
 
-This package documents the intended seam and re-exports the factory for new code:
+- ``FanboxClientMixin``  (common.browser.fanbox_client)
+- ``SketchClientMixin``  (common.browser.sketch_client)
+- core Pixiv methods remain on ``PixivBrowser`` in PixivBrowserFactory
 
-    from common.browser import get_browser
+Public entry:
 
-Future work can move FANBOX/Sketch methods into dedicated clients without
-changing call sites that already import from here.
+    from common.browser import get_browser, FanboxClientMixin, SketchClientMixin
 """
-from common.PixivBrowserFactory import getBrowser as get_browser
+from common.browser.fanbox_client import FanboxClientMixin
+from common.browser.sketch_client import SketchClientMixin
 
-__all__ = ["get_browser"]
+
+def get_browser(*args, **kwargs):
+    """Lazy re-export to avoid circular import with PixivBrowserFactory."""
+    from common.PixivBrowserFactory import getBrowser
+    return getBrowser(*args, **kwargs)
+
+
+__all__ = [
+    "get_browser",
+    "FanboxClientMixin",
+    "SketchClientMixin",
+]
