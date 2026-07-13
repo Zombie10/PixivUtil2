@@ -4,7 +4,7 @@ import codecs
 import os
 import re
 import sys
-from typing import List
+from typing import List, Optional
 
 import demjson3
 from bs4 import BeautifulSoup
@@ -89,6 +89,24 @@ class FanboxPost(object):
             return f"FanboxPost({self.imageId}, {self.imageTitle}, {self.type}, {self.feeRequired})"
 
     def parsePost(self, jsPost):
+        # Unwrap { "post": { ... } } payloads from post.info when callers forget to normalize.
+        if isinstance(jsPost, dict) and "title" not in jsPost and isinstance(jsPost.get("post"), dict):
+            jsPost = jsPost["post"]
+
+        if not isinstance(jsPost, dict):
+            raise PixivException(
+                f"Invalid Fanbox post payload type={type(jsPost).__name__} for post={self.imageId}",
+                errorCode=9999,
+                htmlPage=jsPost,
+            )
+
+        if "title" not in jsPost:
+            raise PixivException(
+                f"Fanbox post payload missing 'title' for post={self.imageId}",
+                errorCode=9999,
+                htmlPage=jsPost,
+            )
+
         self.imageTitle = jsPost["title"]
 
         # Issue 1181
@@ -104,16 +122,18 @@ class FanboxPost(object):
             self.coverImageUrl = _re_fanbox_cover.sub("fanbox", coverUrl)
             self.try_add(coverUrl, self.embeddedFiles)
 
-        self.worksDate = jsPost["publishedDatetime"]
-        self.worksDateDateTime = datetime_z.parse_datetime(self.worksDate)
-        self.updatedDate = jsPost["updatedDatetime"]
-        self.updatedDateDatetime = datetime_z.parse_datetime(self.updatedDate)
+        self.worksDate = jsPost.get("publishedDatetime") or jsPost.get("published") or ""
+        if self.worksDate:
+            self.worksDateDateTime = datetime_z.parse_datetime(self.worksDate)
+        self.updatedDate = jsPost.get("updatedDatetime") or jsPost.get("updated") or self.worksDate
+        if self.updatedDate:
+            self.updatedDateDatetime = datetime_z.parse_datetime(self.updatedDate)
 
         if "feeRequired" in jsPost:
             self.feeRequired = jsPost["feeRequired"]
 
         # Issue #420
-        if self._tzInfo is not None:
+        if self._tzInfo is not None and self.worksDateDateTime is not None:
             self.worksDateDateTime = self.worksDateDateTime.astimezone(self._tzInfo)
 
         # Issue #1094
@@ -125,7 +145,7 @@ class FanboxPost(object):
             # assume it is image post
             self.type = "image"
 
-        self.likeCount = int(jsPost["likeCount"])
+        self.likeCount = int(jsPost.get("likeCount") or 0)
 
         # Issue #1094
         if "body" not in jsPost or jsPost["body"] is None:
@@ -526,6 +546,78 @@ class FanboxArtist(object):
     Pages = None
     PageIndex = 0
 
+    @staticmethod
+    def normalize_post_payload(body):
+        """
+        Normalize FANBOX post.info / list payloads to a single post dict.
+        API may return:
+          - { "title": ..., "id": ... }  (legacy)
+          - { "post": { "title": ..., "id": ... } }
+        """
+        if body is None:
+            return None
+        if isinstance(body, dict):
+            post = body.get("post")
+            if isinstance(post, dict) and ("title" in post or "id" in post or "type" in post):
+                return post
+            if "title" in body or "id" in body or "type" in body:
+                return body
+        return body
+
+    @classmethod
+    def _extract_supporting_plans(cls, body):
+        if body is None:
+            return []
+        if isinstance(body, list):
+            return body
+        if isinstance(body, dict):
+            for key in ("plans", "supportingPlans", "creators", "items"):
+                if key in body and body[key] is not None:
+                    value = body[key]
+                    if isinstance(value, list):
+                        return value
+            # Single creator/plan object
+            if "user" in body or "creatorId" in body or "userId" in body:
+                return [body]
+        raise PixivException(f"Unexpected Fanbox artist list format: {type(body).__name__}", 9999, body)
+
+    @staticmethod
+    def _plan_user_id(plan) -> Optional[str]:
+        if plan is None:
+            return None
+        if isinstance(plan, (str, int)):
+            # Following list may return bare user/creator ids.
+            return str(plan)
+        if not isinstance(plan, dict):
+            return None
+        user = plan.get("user")
+        if isinstance(user, dict) and user.get("userId") is not None:
+            return str(user["userId"])
+        if plan.get("userId") is not None:
+            return str(plan["userId"])
+        return None
+
+    @staticmethod
+    def _plan_creator_id(plan) -> Optional[str]:
+        if plan is None:
+            return None
+        if isinstance(plan, (str, int)):
+            return str(plan)
+        if not isinstance(plan, dict):
+            return None
+        if plan.get("creatorId") is not None:
+            return str(plan["creatorId"])
+        user = plan.get("user")
+        if isinstance(user, dict):
+            if user.get("creatorId") is not None:
+                return str(user["creatorId"])
+            # Fallback: some payloads only have userId.
+            if user.get("userId") is not None:
+                return str(user["userId"])
+        if plan.get("userId") is not None:
+            return str(plan["userId"])
+        return None
+
     @classmethod
     def parseArtistIds(cls, page):
         ids = list()
@@ -535,11 +627,10 @@ class FanboxArtist(object):
             raise PixivException("Error when requesting Fanbox", 9999, page)
 
         if "body" in js and js["body"] is not None:
-            js_body = js["body"]
-            if "supportingPlans" in js["body"]:
-                js_body = js_body["supportingPlans"]
-            for creator in js_body:
-                ids.append(creator["user"]["userId"])
+            for plan in cls._extract_supporting_plans(js["body"]):
+                user_id = cls._plan_user_id(plan)
+                if user_id is not None:
+                    ids.append(user_id)
         return ids
 
     @classmethod
@@ -551,11 +642,14 @@ class FanboxArtist(object):
             raise PixivException("Error when requesting Fanbox", 9999, page)
 
         if "body" in js and js["body"] is not None:
-            js_body = js["body"]
-            if "supportingPlans" in js["body"]:
-                js_body = js_body["supportingPlans"]
-            for creator in js_body:
-                ids.append(creator["creatorId"])
+            seen = set()
+            for plan in cls._extract_supporting_plans(js["body"]):
+                creator_id = cls._plan_creator_id(plan)
+                if creator_id is None:
+                    continue
+                if creator_id not in seen:
+                    seen.add(creator_id)
+                    ids.append(creator_id)
         return ids
 
     def __init__(self, artist_id, artist_name, creator_id, tzInfo=None):
@@ -590,32 +684,73 @@ class FanboxArtist(object):
 
             posts = list()
 
-            if "creator" in js_body:
-                self.artistName = js_body["creator"]["user"]["name"]
+            if isinstance(js_body, dict) and "creator" in js_body:
+                try:
+                    self.artistName = js_body["creator"]["user"]["name"]
+                except (KeyError, TypeError):
+                    pass
 
-            if "post" in js_body:
-                # new api
-                post_root = js_body["post"]
+            next_url_from_payload = None
+            if isinstance(js_body, list):
+                post_root = js_body
+            elif isinstance(js_body, dict) and "post" in js_body:
+                post_data = js_body["post"]
+                if isinstance(post_data, list):
+                    post_root = post_data
+                elif isinstance(post_data, dict) and "items" in post_data:
+                    post_root = post_data["items"]
+                    next_url_from_payload = post_data.get("nextUrl")
+                elif isinstance(post_data, dict) and ("title" in post_data or "id" in post_data):
+                    # Single post wrapped as body.post (post.info style)
+                    post_root = [post_data]
+                else:
+                    post_root = post_data if isinstance(post_data, list) else [post_data]
+            elif isinstance(js_body, dict) and "items" in js_body:
+                post_root = js_body["items"]
+                next_url_from_payload = js_body.get("nextUrl")
             else:
                 # https://www.pixiv.net/ajax/fanbox/post?postId={0}
-                # or old api
-                post_root = js_body
+                # or old api / single post object
+                if isinstance(js_body, dict) and ("title" in js_body or "id" in js_body):
+                    post_root = [js_body]
+                else:
+                    post_root = js_body
 
-            # for jsPost in post_root["items"]:
+            if not isinstance(post_root, list):
+                raise PixivException(
+                    f"Unexpected Fanbox posts format for artist {self.artistId}: {type(post_root).__name__}",
+                    9999,
+                    page,
+                )
+
             for jsPost in post_root:
+                if not isinstance(jsPost, dict):
+                    continue
+                if "id" not in jsPost:
+                    continue
                 post_id = int(jsPost["id"])
                 post = FanboxPost(post_id, self, jsPost, tzInfo=self._tzInfo)
                 posts.append(post)
                 # sanity check
-                assert (self.artistId == int(jsPost["user"]["userId"])), "Different user id from constructor!"
+                user = jsPost.get("user") or {}
+                user_id = user.get("userId")
+                if user_id is not None:
+                    assert (self.artistId == int(user_id)), "Different user id from constructor!"
 
-            # self.nextUrl = post_root["nextUrl"]
+            # Prefer paginated URL list from post.paginateCreator when available;
+            # fall back to nextUrl embedded in legacy listCreator payloads.
             self.PageIndex += 1
-            if self.PageIndex < len(self.Pages):
+            if self.Pages and self.PageIndex < len(self.Pages):
                 self.nextUrl = self.Pages[self.PageIndex]
+            elif next_url_from_payload:
+                self.nextUrl = next_url_from_payload
             else:
                 self.nextUrl = None
             if self.nextUrl is not None and len(self.nextUrl) > 0:
                 self.hasNextPage = True
+            else:
+                self.hasNextPage = False
 
             return posts
+
+        return []

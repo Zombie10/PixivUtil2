@@ -5,6 +5,7 @@ import gc
 import common.datetime_z as datetime_z
 import common.PixivBrowserFactory as PixivBrowserFactory
 import common.PixivConstant as PixivConstant
+import common.PixivRunStats as PixivRunStats
 import handler.PixivDownloadHandler as PixivDownloadHandler
 import common.PixivHelper as PixivHelper
 import model.PixivModelFanbox as PixivModelFanbox
@@ -15,6 +16,7 @@ import handler.PixivArtistHandler as PixivArtistHandler
 def process_fanbox_artist_by_id(caller, config, artist_id, end_page, title_prefix=""):
     config.loadConfig(path=caller.configfile)
     br: PixivBrowserFactory.PixivBrowser = PixivBrowserFactory.getBrowser()
+    stats = PixivRunStats.get_stats()
 
     caller.set_console_title(title_prefix)
     try:
@@ -22,8 +24,14 @@ def process_fanbox_artist_by_id(caller, config, artist_id, end_page, title_prefi
     except PixivException as pex:
         PixivHelper.print_and_log("error", f"Error getting FANBOX artist by id: {artist_id} ==> {pex.message}")
         if pex.errorCode != PixivException.USER_ID_SUSPENDED:
-            return
-        artist = br.fanboxGetArtistById(artist_id, for_suspended=True)
+            stats.record_artist_error(f"artist {artist_id}: {pex.message}")
+            return False
+        try:
+            artist = br.fanboxGetArtistById(artist_id, for_suspended=True)
+        except Exception as ex:
+            PixivHelper.print_and_log("error", f"Error getting suspended FANBOX artist {artist_id}: {ex}")
+            stats.record_artist_error(f"artist {artist_id}: {ex}")
+            return False
 
         formats = f"{config.filenameFormatFanboxCover}{config.filenameFormatFanboxContent}{config.filenameFormatFanboxInfo}"
         name_flag = "%artist%" in formats
@@ -49,11 +57,17 @@ def process_fanbox_artist_by_id(caller, config, artist_id, end_page, title_prefi
                         PixivHelper.print_and_log("info", f"Using creatorId as member_token: {artist.artistToken}")
                     else:
                         artist.artistToken = input(f"Please input %member_token% for {artist_id}: ").strip()
+    except Exception as ex:
+        PixivHelper.print_and_log("error", f"Unexpected error getting FANBOX artist {artist_id}: {ex}")
+        PixivHelper.get_logger().exception("FANBOX artist lookup failed for %s", artist_id)
+        stats.record_artist_error(f"artist {artist_id}: {ex}")
+        return False
 
     current_page = 1
     next_url = None
     image_count = 1
     updated_limit_count = 0
+    artist_had_error = False
     while True:
         PixivHelper.print_and_log("info", "Processing {0}, page {1}".format(artist, current_page))
         caller.set_console_title(f"{title_prefix} {artist}, page {current_page}")
@@ -61,11 +75,25 @@ def process_fanbox_artist_by_id(caller, config, artist_id, end_page, title_prefi
             posts = br.fanboxGetPostsFromArtist(artist, next_url)
         except PixivException as pex:
             PixivHelper.print_and_log("error", "Error getting FANBOX posts of artist: {0} ==> {1}".format(artist, pex.message))
+            artist_had_error = True
+            stats.record_error(f"posts {artist_id}: {pex.message}")
             break
+        except Exception as ex:
+            PixivHelper.print_and_log("error", f"Unexpected error getting FANBOX posts of {artist}: {ex}")
+            PixivHelper.get_logger().exception("FANBOX posts fetch failed for %s", artist_id)
+            artist_had_error = True
+            stats.record_error(f"posts {artist_id}: {ex}")
+            break
+
+        if posts is None:
+            posts = []
 
         for post in posts:
             print("#{0}".format(image_count))
-            post.printPost()
+            try:
+                post.printPost()
+            except Exception:
+                PixivHelper.print_and_log("warn", f"Unable to print post summary for post {getattr(post, 'imageId', '?')}")
 
             # images
             if post.type in PixivModelFanbox.FanboxPost._supportedType:
@@ -75,12 +103,23 @@ def process_fanbox_artist_by_id(caller, config, artist_id, end_page, title_prefi
                     choice = input("Keyboard Interrupt detected, continue to next post? (Y/N)").rstrip("\r")
                     if choice.upper() == 'N':
                         PixivHelper.print_and_log("info", f"FANBOX artist: {artist}, processing aborted")
-                        return
+                        stats.record_artist_error(f"artist {artist_id}: aborted by user")
+                        return False
                     else:
                         continue
-                # Similar behavior to Pixiv's checkUpdatedLimit skip
-                # If we keep encountering already downloaded posts, skip the rest for this creator.
+                except Exception as ex:
+                    # Do not abort the whole artist/list on a single bad post.
+                    artist_had_error = True
+                    detail = f"post {getattr(post, 'imageId', '?')} artist {artist_id}: {ex}"
+                    PixivHelper.print_and_log("error", f"Error processing FANBOX post, continuing: {detail}")
+                    PixivHelper.get_logger().exception("FANBOX post failed: %s", detail)
+                    stats.record_error(detail)
+                    image_count += 1
+                    PixivHelper.wait(config=config)
+                    continue
+
                 if result == PixivConstant.PIXIVUTIL_SKIP_DUPLICATE:
+                    stats.record_skip()
                     updated_limit_count += 1
                     if (config.checkUpdatedLimitFanbox != 0 and updated_limit_count >= config.checkUpdatedLimitFanbox):
                         PixivHelper.print_and_log(
@@ -88,12 +127,22 @@ def process_fanbox_artist_by_id(caller, config, artist_id, end_page, title_prefi
                                 f"Skipping FANBOX member: {artist.artistId}\n" +
                                 f"(reached checkUpdatedLimitFanbox={config.checkUpdatedLimitFanbox})")
                         PixivBrowserFactory.getBrowser().clear_history()
-                        return
+                        stats.record_artist_ok()
+                        return True
                     gc.collect()
+                elif result == PixivConstant.PIXIVUTIL_SKIP_BLACKLIST:
+                    stats.record_restricted()
                 elif result == PixivConstant.PIXIVUTIL_OK:
+                    stats.record_ok()
                     updated_limit_count = 0
+                elif result == PixivConstant.PIXIVUTIL_NOT_OK:
+                    stats.record_error(f"post {getattr(post, 'imageId', '?')}: download not ok")
+                    artist_had_error = True
+                else:
+                    stats.bump(f"result_{result}")
             else:
                 PixivHelper.print_and_log("info", f"Unsupported post type: {post.imageId} => {post.type}")
+                stats.bump("unsupported_type")
             image_count += 1
             PixivHelper.wait(config=config)
 
@@ -108,6 +157,12 @@ def process_fanbox_artist_by_id(caller, config, artist_id, end_page, title_prefi
         if next_url is None:
             PixivHelper.print_and_log("info", "No more next page for {0}".format(artist))
             break
+
+    if artist_had_error:
+        stats.record_artist_error(f"artist {artist_id}: completed with errors")
+        return False
+    stats.record_artist_ok()
+    return True
 
 
 def process_fanbox_post(caller, config, post: PixivModelFanbox.FanboxPost, artist):
@@ -181,9 +236,10 @@ def process_fanbox_post(caller, config, post: PixivModelFanbox.FanboxPost, artis
         if post.images is None or len(post.images) == 0:
             PixivHelper.print_and_log("info", "No Image available in post: {0}.".format(post.imageId))
         else:
-            current_page = 0
             print("Image Count = {0}".format(len(post.images)))
-            for image_url in post.images:
+            referer = "https://www.pixiv.net/fanbox/creator/{0}/post/{1}".format(artist.artistId, post.imageId)
+            jobs = []
+            for current_page, image_url in enumerate(post.images):
                 # fake the image_url for filename compatibility, add post id and pagenum
                 fake_image_url = image_url.replace("{0}/".format(post.imageId),
                                                    "{0}_p{1}_".format(post.imageId, current_page))
@@ -199,35 +255,38 @@ def process_fanbox_post(caller, config, post: PixivModelFanbox.FanboxPost, artis
                                                      tagTranslationLocale=config.tagTranslationLocale)
 
                 filename = PixivHelper.sanitize_filename(filename, config.rootDirectory)
-
                 post.linkToFile[image_url] = filename
-
-                referer = "https://www.pixiv.net/fanbox/creator/{0}/post/{1}".format(artist.artistId, post.imageId)
-
                 print("Downloading image {0} from {1}".format(current_page, image_url))
                 print("Saved to {0}".format(filename))
+                jobs.append({
+                    "url": image_url,
+                    "filename": filename,
+                    "referer": referer,
+                    "page": current_page,
+                })
 
-                # filesize detection and overwrite issue
-                _oldvalue = config.alwaysCheckFileSize
-                config.alwaysCheckFileSize = False
-                (result, filename) = PixivDownloadHandler.download_image(caller,
-                                                                         image_url,
-                                                                         filename,
-                                                                         referer,
-                                                                         False,  # config.overwrite somehow unable to get remote filesize
-                                                                         config.retry,
-                                                                         config.backupOldFile,
-                                                                         image=post,
-                                                                         page=current_page,
-                                                                         download_from=PixivConstant.DOWNLOAD_FANBOX)
+            # filesize detection and overwrite issue
+            _oldvalue = config.alwaysCheckFileSize
+            config.alwaysCheckFileSize = False
+            try:
+                results = PixivDownloadHandler.download_image_list(
+                    caller,
+                    jobs,
+                    config,
+                    overwrite=False,
+                    max_retry=config.retry,
+                    backup_old_file=config.backupOldFile,
+                    image=post,
+                    download_from=PixivConstant.DOWNLOAD_FANBOX,
+                )
+            finally:
+                config.alwaysCheckFileSize = _oldvalue
+
+            for result, filename, page in results:
                 if result == PixivConstant.PIXIVUTIL_KEYBOARD_INTERRUPT:
                     raise KeyboardInterrupt()
-                post_files.append((post.imageId, current_page, filename))
-
+                post_files.append((post.imageId, page, filename))
                 PixivHelper.get_logger().debug("Download %s result: %s", filename, result)
-
-                config.alwaysCheckFileSize = _oldvalue
-                current_page = current_page + 1
 
         # Implement #447
         filename = PixivHelper.make_filename(config.filenameFormatFanboxInfo,

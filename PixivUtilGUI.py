@@ -73,9 +73,12 @@ class PixivUtilGUI:
             ("7", "Download from Tags List"),
             ("8", "Download New Illustrations"),
             ("9", "Download by Title/Caption"),
+            ("z", "Export + Download bookmarked artists"),
             ("f1", "FANBOX: Supported Artists"),
             ("f2", "FANBOX: By Creator ID"),
+            ("f3", "FANBOX: By Post ID"),
             ("f4", "FANBOX: Followed Artists"),
+            ("f5", "FANBOX: Custom List"),
         ]
         
         row = 0

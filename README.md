@@ -1,3 +1,26 @@
+# PixivUtil2
+
+Download artworks from **Pixiv**, **FANBOX**, and **Sketch**.
+
+This repository is a fork of [Nandaka/PixivUtil2](https://github.com/Nandaka/PixivUtil2) with extra automation and reliability features.  
+**Fork docs:** [docs/FORK.md](docs/FORK.md)
+
+## Quick start (fork)
+
+```sh
+python3 -m venv env && source env/bin/activate
+pip install -r requirements.txt
+# Edit config.ini (cookies, rootDirectory, …)
+
+./run_z.sh 5 4    # bookmarked artists → download
+./run_f1.sh 1     # FANBOX supporting list (resumable)
+python PixivUtil2.py   # interactive menu
+```
+
+See [docs/FORK.md](docs/FORK.md) for checkpoint/resume, indexes, config keys, and Firefox cookies.
+
+---
+
 # Requirements:
 - Running from source code:
   - Python 3.10+ (https://www.python.org/)
@@ -1101,3 +1124,26 @@ See LICENSE.
 
 
 [![Run on Repl.it](https://repl.it/badge/github/Nandaka/PixivUtil2)](https://repl.it/github/Nandaka/PixivUtil2)
+
+
+# Fork improvements (Zombie10)
+
+Full documentation: **[docs/FORK.md](docs/FORK.md)**
+
+Summary:
+
+| Area | What changed |
+|------|----------------|
+| Automation | `run_z.sh`, `run_f1.sh` with logs, exit codes, macOS notifications |
+| FANBOX | Per-post/artist error isolation, API payload normalize, checkpoint/resume (`--no-resume`) |
+| DB | Automatic SQLite indexes for large local DBs |
+| Ops | Run summary, startup cleanup of `url_list_*.txt` and rotated logs |
+| Network | Exponential retry backoff; optional `downloadWorkers` for multi-file posts |
+| Auth | Firefox cookie reader for FANBOX (`cookieFanboxFromBrowser`) |
+| Defaults | `logLevel=INFO`, `checkUpdatedLimit=5`, `checkUpdatedLimitFanbox=5` |
+
+```sh
+./run_z.sh 5 4
+./run_f1.sh 1
+python PixivUtil2.py -s f1 -x --ep=1 --no-resume
+```

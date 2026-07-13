@@ -1,9 +1,9 @@
 [project]
 name = "pixivutil2"
-version = "0.1.0"
-description = "Add your description here"
+version = "2025.11.12"
+description = "Download images from Pixiv, FANBOX, and Sketch"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.10"
 dependencies = [
     "beautifulsoup4>=4.9.3",
     "browser-cookie3>=0.20.1",
@@ -15,4 +15,8 @@ dependencies = [
     "mechanize>=0.4.5",
     "pillow>=12.2.0",
     "pysocks>=1.7.1",
+    "pyperclip",
 ]
+
+[project.scripts]
+PixivUtil2 = "PixivUtil2:main"

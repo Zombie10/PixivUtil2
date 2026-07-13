@@ -31,6 +31,54 @@ class TestPixivModel_Fanbox(unittest.TestCase):
         self.assertTrue('11443' in result)
         self.assertTrue('226267' in result)
 
+    def testFanboxPostInfoWrapper(self):
+        post_payload = {
+            "id": "12182227",
+            "title": "半分おわってもた…",
+            "feeRequired": 0,
+            "publishedDatetime": "2026-07-01T23:00:00+09:00",
+            "updatedDatetime": "2026-07-01T23:00:00+09:00",
+            "likeCount": 1,
+            "type": "article",
+            "body": {"blocks": [], "imageMap": {}, "fileMap": {}, "embedMap": {}, "urlEmbedMap": {}},
+            "isRestricted": False,
+            "user": {"userId": "179511", "name": "ちま"},
+        }
+        wrapped = json.dumps({"body": {"post": post_payload}})
+        js = json.loads(wrapped)
+        body = FanboxArtist.normalize_post_payload(js["body"])
+        post = FanboxPost(12182227, None, body, None)
+        self.assertEqual(post.imageTitle, "半分おわってもた…")
+
+        # Also accept the raw wrapped body inside parsePost
+        post2 = FanboxPost(12182227, None, js["body"], None)
+        self.assertEqual(post2.imageTitle, "半分おわってもた…")
+
+    def testFanboxSupportedArtistPlansWrapper(self):
+        reader = open('./test_data/Fanbox_supported_artist.json', 'r', encoding="utf-8")
+        plans = json.loads(reader.read())["body"]
+        reader.close()
+        wrapped = json.dumps({"body": {"plans": plans}})
+        result = FanboxArtist.parseArtistCreatorIDs(wrapped)
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0], 'madeToPassUnitTest')
+
+        user_ids = FanboxArtist.parseArtistIds(wrapped)
+        self.assertEqual(len(user_ids), 52)
+        self.assertTrue('4820' in user_ids)
+
+    def testFanboxCreatorIdsBareStringsAndUserFallback(self):
+        bare = json.dumps({"body": ["creator_a", "creator_b", "creator_a"]})
+        self.assertEqual(FanboxArtist.parseArtistCreatorIDs(bare), ["creator_a", "creator_b"])
+
+        page = json.dumps({
+            "body": [
+                {"user": {"userId": "10"}, "creatorId": "c10"},
+                {"userId": "20"},
+            ]
+        })
+        self.assertEqual(FanboxArtist.parseArtistIds(page), ["10", "20"])
+
     def testFanboxArtistPosts(self):
         reader = open('./test_data/Fanbox_artist_posts.json', 'r', encoding="utf-8")
         p = reader.read()

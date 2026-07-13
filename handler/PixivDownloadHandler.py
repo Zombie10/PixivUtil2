@@ -8,6 +8,7 @@ import sys
 import time
 import traceback
 import urllib
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import mechanize
 
@@ -17,6 +18,15 @@ import common.PixivConstant as PixivConstant
 import common.PixivHelper as PixivHelper
 from PixivDBManager import PixivDBManager
 from common.PixivException import PixivException
+
+
+def _retry_delay_seconds(config, retry_count):
+    """Return wait time for the Nth retry (1-based retry_count after failure)."""
+    base = max(1, int(getattr(config, "retryWait", 5) or 5))
+    if getattr(config, "retryBackoff", True):
+        # Exponential backoff: base, 2*base, 4*base... capped at 5 minutes.
+        return min(base * (2 ** max(0, retry_count - 1)), 300)
+    return base
 
 
 def download_image(caller,
@@ -217,8 +227,13 @@ def download_image(caller,
                     PixivHelper.print_and_log('error', f"Incomplete Download for {url} => {filename_save}")
                     if retry_count < max_retry:
                         retry_count = retry_count + 1
-                        PixivHelper.print_and_log(None, f"\rRetrying [{retry_count}]...", newline=False)
-                        PixivHelper.print_delay(config.retryWait)
+                        delay = _retry_delay_seconds(config, retry_count)
+                        PixivHelper.print_and_log(
+                            None,
+                            f"\rRetrying [{retry_count}/{max_retry}] in {delay}s...",
+                            newline=False,
+                        )
+                        PixivHelper.print_delay(delay)
                         continue
                     return (PixivConstant.DOWNLOAD_FAILED_OTHER, filename_save)
 
@@ -294,8 +309,15 @@ def download_image(caller,
 
             except urllib.error.HTTPError as httpError:
                 PixivHelper.print_and_log('error', f'[download_image()] HTTP Error: {httpError} at {url}')
-                if httpError.code == 404 or httpError.code == 502 or httpError.code == 500:
+                # 404 is permanent; 429/503 should retry with backoff.
+                if httpError.code == 404:
                     return (PixivConstant.PIXIVUTIL_NOT_OK, None)
+                if httpError.code in (429, 500, 502, 503, 520, 521, 522, 523, 524):
+                    temp_error_code = PixivException.DOWNLOAD_FAILED_NETWORK
+                    raise
+                if httpError.code in (401, 403):
+                    temp_error_code = PixivException.DOWNLOAD_FAILED_NETWORK
+                    raise
                 temp_error_code = PixivException.DOWNLOAD_FAILED_NETWORK
                 raise
             except urllib.error.URLError as urlError:
@@ -328,10 +350,63 @@ def download_image(caller,
 
             if retry_count < max_retry:
                 retry_count = retry_count + 1
-                PixivHelper.print_and_log(None, f"\rRetrying [{retry_count}]...", newline=False)
-                PixivHelper.print_delay(config.retryWait)
+                delay = _retry_delay_seconds(config, retry_count)
+                PixivHelper.print_and_log(
+                    None,
+                    f"\rRetrying [{retry_count}/{max_retry}] in {delay}s...",
+                    newline=False,
+                )
+                PixivHelper.print_delay(delay)
             else:
                 raise
+
+
+def download_image_list(caller, jobs, config, overwrite=False, max_retry=None, backup_old_file=False,
+                       image=None, download_from=PixivConstant.DOWNLOAD_PIXIV, notifier=None):
+    """
+    Download multiple images optionally in parallel.
+    jobs: list of dicts with keys url, filename, referer, page
+    Returns list of (result, filename, page) in the same order as jobs.
+    """
+    if max_retry is None:
+        max_retry = config.retry
+    workers = int(getattr(config, "downloadWorkers", 1) or 1)
+    if workers < 1:
+        workers = 1
+
+    def _one(job):
+        result, filename = download_image(
+            caller,
+            job["url"],
+            job["filename"],
+            job.get("referer"),
+            overwrite,
+            max_retry,
+            backup_old_file,
+            image=image,
+            page=job.get("page"),
+            notifier=notifier,
+            download_from=download_from,
+        )
+        return result, filename, job.get("page")
+
+    if workers == 1 or len(jobs) <= 1:
+        return [_one(job) for job in jobs]
+
+    PixivHelper.print_and_log("info", f"Parallel download workers={workers} for {len(jobs)} file(s)")
+    results = [None] * len(jobs)
+    with ThreadPoolExecutor(max_workers=min(workers, len(jobs))) as executor:
+        future_map = {executor.submit(_one, job): idx for idx, job in enumerate(jobs)}
+        for future in as_completed(future_map):
+            idx = future_map[future]
+            try:
+                results[idx] = future.result()
+            except KeyboardInterrupt:
+                raise
+            except Exception as ex:
+                PixivHelper.print_and_log("error", f"Parallel download failed for job {idx}: {ex}")
+                results[idx] = (PixivConstant.PIXIVUTIL_NOT_OK, None, jobs[idx].get("page"))
+    return results
 
 
 def perform_download(url, file_size, filename, overwrite, config, referer=None, notifier=None):

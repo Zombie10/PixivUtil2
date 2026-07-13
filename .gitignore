@@ -49,6 +49,8 @@ ignore_list.txt
 numpy-atlas.dll
 tags.txt
 url_list_*.txt
+checkpoint_fanbox_*.json
+Exported_userId_bookmark.txt
 test.db.sqlite
 .DS_Store
 .AppleDouble
@@ -68,3 +70,7 @@ Network Trash Folder
 Temporary Items
 .apdisk
 Error*
+
+.codebase-memory/
+.env
+

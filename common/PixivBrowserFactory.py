@@ -1259,6 +1259,11 @@ class PixivBrowser(mechanize.Browser):
                 break
 
         js = demjson3.decode(p_response)
+        # Normalize body.post wrapper (post.info) and other shape variants.
+        body = js.get("body")
+        normalized = FanboxArtist.normalize_post_payload(body)
+        if normalized is not None:
+            js["body"] = normalized
         return js
 
     def sketch_get_post_by_post_id(self, post_id, artist=None):

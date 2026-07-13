@@ -217,6 +217,10 @@ class PixivDBManager(object):
             self.create_update_novel_table(c)
             self.conn.commit()
 
+            # Performance indexes for large local databases
+            self.createIndexes(c)
+            self.conn.commit()
+
             print("done.")
         except BaseException:
             print("Error at createDatabase():", str(sys.exc_info()))
@@ -224,6 +228,42 @@ class PixivDBManager(object):
             raise
         finally:
             c.close()
+
+    def createIndexes(self, cursor=None):
+        """Create helpful indexes if they do not already exist (safe to re-run)."""
+        close_cursor = False
+        c = cursor
+        if c is None:
+            c = self.conn.cursor()
+            close_cursor = True
+        try:
+            index_statements = [
+                "CREATE INDEX IF NOT EXISTS idx_pixiv_image_member ON pixiv_master_image(member_id)",
+                "CREATE INDEX IF NOT EXISTS idx_pixiv_image_member_updated ON pixiv_master_image(member_id, last_update_date)",
+                "CREATE INDEX IF NOT EXISTS idx_pixiv_image_save_name ON pixiv_master_image(save_name)",
+                "CREATE INDEX IF NOT EXISTS idx_pixiv_manga_image_id ON pixiv_manga_image(image_id)",
+                "CREATE INDEX IF NOT EXISTS idx_pixiv_member_last_update ON pixiv_master_member(last_update_date)",
+                "CREATE INDEX IF NOT EXISTS idx_pixiv_member_deleted ON pixiv_master_member(is_deleted)",
+                "CREATE INDEX IF NOT EXISTS idx_fanbox_post_member ON fanbox_master_post(member_id)",
+                "CREATE INDEX IF NOT EXISTS idx_fanbox_post_updated ON fanbox_master_post(updated_date)",
+                "CREATE INDEX IF NOT EXISTS idx_fanbox_post_image_post ON fanbox_post_image(post_id)",
+                "CREATE INDEX IF NOT EXISTS idx_sketch_post_member ON sketch_master_post(member_id)",
+                "CREATE INDEX IF NOT EXISTS idx_sketch_post_image_post ON sketch_post_image(post_id)",
+                "CREATE INDEX IF NOT EXISTS idx_pixiv_image_to_tag_tag ON pixiv_image_to_tag(tag_id)",
+                "CREATE INDEX IF NOT EXISTS idx_pixiv_stats_updated ON pixiv_stats(last_update_date)",
+            ]
+            for sql in index_statements:
+                try:
+                    c.execute(sql)
+                except BaseException:
+                    # Table may not exist yet on very old DBs mid-migration.
+                    pass
+            if close_cursor:
+                self.conn.commit()
+                print("Database indexes ensured.")
+        finally:
+            if close_cursor:
+                c.close()
 
     def dropDatabase(self):
         try:

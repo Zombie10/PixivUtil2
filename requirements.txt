@@ -1,15 +1,12 @@
 beautifulsoup4>=4.9.3
+browser-cookie3>=0.20.1
 certifi>=2021.5.30
+cloudscraper>=1.2.58
+colorama>=0.4.4
+curl_cffi>=0.11.3
 demjson3>=3.0.0
 mechanize>=0.4.5
-# numpy>=1.17.2
 pillow>=12.2.0
 PySocks>=1.7.1
-# win_unicode_console>=0.5
-# requests>=2.22.0
-# apng>=0.3.3
-colorama>=0.4.4
-cloudscraper>=1.2.58
-curl_cffi>=0.11.3
-# pyexiv2>=2.7.0 # Required for writeImageXMP.
 pyperclip
+# pyexiv2>=2.7.0 # Optional: write XMP metadata (writeImageXMP).

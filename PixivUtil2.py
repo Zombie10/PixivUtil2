@@ -1042,6 +1042,11 @@ def menu_fanbox_download_from_list(op_is_valid, via, args, options):
     else:
         end_page = int(input("End Page (default is 0) = ").rstrip("\r") or 0)
 
+    import common.PixivCheckpoint as PixivCheckpoint
+    import common.PixivRunStats as PixivRunStats
+
+    stats = PixivRunStats.reset_stats(mode=f"fanbox_{via_type}")
+
     ids = list()
     if via in [PixivModelFanbox.FanboxArtist.SUPPORTING, PixivModelFanbox.FanboxArtist.FOLLOWING]:
         ids = __br__.fanboxGetArtistList(via)
@@ -1066,23 +1071,76 @@ def menu_fanbox_download_from_list(op_is_valid, via, args, options):
     PixivHelper.print_and_log("info", f"Found {len(ids)} artist(s) in {via_type} list")
     PixivHelper.print_and_log(None, f"{ids}")
 
+    # Optional checkpoint/resume for long FANBOX list runs.
+    checkpoint = None
+    use_checkpoint = getattr(__config__, "enableCheckpoint", True)
+    if use_checkpoint:
+        checkpoint_path = getattr(__config__, "checkpointPathFanbox", "") or f"./checkpoint_fanbox_{via_type}.json"
+        checkpoint = PixivCheckpoint.PixivCheckpoint(checkpoint_path, mode=f"fanbox_{via_type}")
+        resume = True
+        if op_is_valid and getattr(options, "no_resume", False):
+            resume = False
+            checkpoint.clear()
+            checkpoint = PixivCheckpoint.PixivCheckpoint(checkpoint_path, mode=f"fanbox_{via_type}")
+        if resume and checkpoint.completed:
+            pending = checkpoint.filter_pending(ids)
+            PixivHelper.print_and_log(
+                "info",
+                f"Resuming FANBOX {via_type}: {len(checkpoint.completed)} done, {len(pending)} pending "
+                f"(checkpoint: {checkpoint_path})",
+            )
+            ids = pending
+            if not ids:
+                PixivHelper.print_and_log("info", "All artists already completed in checkpoint.")
+                PixivRunStats.finish_stats(PixivHelper.print_and_log)
+                return
+
+    total = len(ids)
     for index, artist_id in enumerate(ids, start=1):
-        # Issue #567
+        # Issue #567 — never abort the whole list on a single artist failure.
         try:
-            PixivFanboxHandler.process_fanbox_artist_by_id(sys.modules[__name__],
-                                                           __config__,
-                                                           artist_id,
-                                                           end_page,
-                                                           title_prefix=f"{index} of {len(ids)}")
+            ok = PixivFanboxHandler.process_fanbox_artist_by_id(
+                sys.modules[__name__],
+                __config__,
+                artist_id,
+                end_page,
+                title_prefix=f"{index} of {total}",
+            )
+            if checkpoint is not None:
+                if ok is False:
+                    checkpoint.mark_failed(artist_id)
+                else:
+                    checkpoint.mark_done(artist_id)
         except KeyboardInterrupt:
             choice = input("Keyboard Interrupt detected, continue to next artist (Y/N)").rstrip("\r")
             if choice.upper() == 'N':
                 PixivHelper.print_and_log("info", f"Artist id: {artist_id}, processing aborted")
+                if checkpoint is not None:
+                    checkpoint.mark_failed(artist_id)
                 break
             else:
                 continue
         except PixivException as pex:
-            PixivHelper.print_and_log("error", f"Error processing FANBOX Artist in {via_type} list: {artist_id} ==> {pex.message}")
+            PixivHelper.print_and_log(
+                "error",
+                f"Error processing FANBOX Artist in {via_type} list: {artist_id} ==> {pex.message}",
+            )
+            stats.record_artist_error(f"{artist_id}: {pex.message}")
+            if checkpoint is not None:
+                checkpoint.mark_failed(artist_id)
+            continue
+        except Exception as ex:
+            PixivHelper.print_and_log(
+                "error",
+                f"Unexpected error processing FANBOX Artist in {via_type} list: {artist_id} ==> {ex}",
+            )
+            __log__.exception("FANBOX list artist failed: %s", artist_id)
+            stats.record_artist_error(f"{artist_id}: {ex}")
+            if checkpoint is not None:
+                checkpoint.mark_failed(artist_id)
+            continue
+
+    PixivRunStats.finish_stats(PixivHelper.print_and_log)
 
 
 def menu_fanbox_download_by_post_id(op_is_valid, args, options):
@@ -1350,7 +1408,7 @@ def menu_export_userId_bookmark(opisvalid, args, options):
     use_image_tag = False
     filename = "Exported_userId_bookmark.txt"
     copy_clipboard = True                # siempre copiar al portapapeles
-    donwload_userId_bookmark = True      # siempre descargar desde clipboard
+    download_userId_bookmark = True      # always download after exporting to clipboard
 
     if opisvalid:
         if len(args) > 0:
@@ -1374,8 +1432,8 @@ def menu_export_userId_bookmark(opisvalid, args, options):
                                                 use_image_tag=use_image_tag,
                                                 filename=filename,
                                                 copy_clipboard=copy_clipboard)
-    
-    if donwload_userId_bookmark:
+
+    if download_userId_bookmark:
         paste_clipboard_download_by_member_id(opisvalid, args, options)
 
 def paste_clipboard_download_by_member_id(opisvalid, args, options):
@@ -1404,6 +1462,9 @@ def paste_clipboard_download_by_member_id(opisvalid, args, options):
     member_ids = PixivHelper.get_ids_from_csv(pyperclip.paste())
     PixivHelper.print_and_log('info', f"Member IDs: {member_ids}")
 
+    import common.PixivRunStats as PixivRunStats
+    stats = PixivRunStats.reset_stats(mode="clipboard_member_ids")
+
     for member_id in member_ids:
         try:
             prefix = f"[{current_member} of {len(member_ids)}] "
@@ -1413,13 +1474,21 @@ def paste_clipboard_download_by_member_id(opisvalid, args, options):
                                               page=start_page,
                                               end_page=end_page,
                                               title_prefix=prefix)
-
+            stats.record_artist_ok()
             current_member = current_member + 1
         except PixivException as ex:
             PixivHelper.print_and_log('error', f"Member ID: {member_id} is not valid")
             global ERROR_CODE
             ERROR_CODE = -1
+            stats.record_artist_error(f"{member_id}: {ex}")
             continue
+        except Exception as ex:
+            PixivHelper.print_and_log('error', f"Member ID: {member_id} failed: {ex}")
+            __log__.exception("clipboard member download failed: %s", member_id)
+            ERROR_CODE = -1
+            stats.record_artist_error(f"{member_id}: {ex}")
+            continue
+    PixivRunStats.finish_stats(PixivHelper.print_and_log)
     print("\n✅ Download completed.")
 
 def set_console_title(title=''):
@@ -1609,6 +1678,11 @@ Used in option e, m, p''')
                       dest='tag_metadata_filter',
                       default='none',
                       help='''Filter for tag metadata (m4). Valid: none, pixpedia, translation, pixpedia_or_translation.''')
+    parser.add_option('--no-resume',
+                      dest='no_resume',
+                      default=False,
+                      action='store_true',
+                      help='Ignore existing FANBOX checkpoint and start the list from scratch.')
     return parser
 
 
@@ -1906,6 +1980,24 @@ def main():
     try:
         __dbManager__ = PixivDBManager(root_directory=__config__.rootDirectory, target=__config__.dbPath)
         __dbManager__.createDatabase()
+
+        # Housekeeping: prune old url dumps / rotated logs (safe no-op when disabled).
+        if getattr(__config__, "enableStartupCleanup", True):
+            try:
+                import common.PixivCleanup as PixivCleanup
+                report = PixivCleanup.run_startup_cleanup(
+                    script_path,
+                    url_list_keep_days=getattr(__config__, "urlListKeepDays", 30),
+                    log_keep_count=getattr(__config__, "logKeepCount", 10),
+                )
+                if report["url_lists_removed"] or report["logs_removed"]:
+                    PixivHelper.print_and_log(
+                        "info",
+                        f"Startup cleanup: removed {report['url_lists_removed']} url list(s), "
+                        f"{report['logs_removed']} old log file(s).",
+                    )
+            except Exception as cleanup_ex:
+                PixivHelper.print_and_log("warn", f"Startup cleanup skipped: {cleanup_ex}")
 
         if __config__.useList:
             PixivListHandler.import_list(sys.modules[__name__], __config__, 'list.txt')

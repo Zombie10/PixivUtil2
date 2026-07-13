@@ -1,3 +1,17 @@
+20260713 (fork / Zombie10)
+- FANBOX: continue after per-post and per-artist failures instead of aborting the whole batch
+- FANBOX: normalize post.info body.post wrappers and alternate supporting/following list shapes
+- FANBOX: checkpoint/resume for f1/f4/f5 (checkpoint_fanbox_*.json, --no-resume)
+- Add run summary counters (common/PixivRunStats.py)
+- Add startup cleanup for old url_list_*.txt and rotated logs (common/PixivCleanup.py)
+- Add SQLite performance indexes (createIndexes) for large local databases
+- Network: exponential retry backoff (retryBackoff); optional downloadWorkers for multi-file FANBOX posts
+- Defaults: logLevel=INFO, checkUpdatedLimit=5, checkUpdatedLimitFanbox=5
+- Scripts: harden run_z.sh / run_f1.sh (exit codes, log markers, macOS notifications)
+- GUI: add z / f3 / f5 modes
+- Docs: docs/FORK.md + README quick start; align requirements.txt / pyproject.toml; fix setup.py version path
+- Tests: FANBOX normalize cases + RunStats/Checkpoint/Cleanup unit tests
+
 20251112
 - Organize scripts and update version
 - Merge add option to save series data to db (#1480) by @psilabs
