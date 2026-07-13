@@ -7,11 +7,15 @@ from cli import state
 
 
 def setup_option_parser():
-
-    state.valid_options = ('1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14', '15', '16', '17', '18', '19', 'm1', 'm2', 'm3', 'm4',
-                       'f1', 'f2', 'f3', 'f4', 'f5',
-                       's1', 's2',
-                       'l', 'd', 'e', 'm', 'b', 'p', 'c', 'z')
+    valid_options = (
+        '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14', '15', '16', '17', '18', '19',
+        'm1', 'm2', 'm3', 'm4',
+        'f1', 'f2', 'f3', 'f4', 'f5', 'f6',
+        's1', 's2',
+        'l', 'd', 'e', 'm', 'b', 'p', 'c', 'z', 'i', 'u', 'r',
+    )
+    # Must write through to PixivUtil2.__valid_options (state.attr= does NOT).
+    state.set_valid_options(valid_options)
     parser = OptionParser()
 
     # need to keep the whitespace to adjust the output for --help

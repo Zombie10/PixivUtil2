@@ -1,0 +1,77 @@
+{
+    // PixivUtil2 debug launches (fork)
+    // Requires: Python extension + debugpy, workspace = repo root
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "PixivUtil2 - Opción Z (Bookmarks → Descarga)",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/PixivUtil2.py",
+            "cwd": "${workspaceFolder}",
+            "python": "${workspaceFolder}/env/bin/python",
+            "args": [
+                "-s", "z",
+                "-x",
+                "--b", "3",
+                "--sp", "1",
+                "--ep", "4"
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "env": {
+                "PYTHONUNBUFFERED": "1"
+            }
+        },
+        {
+            "name": "PixivUtil2 - Opción F1 (FANBOX Supporting)",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/PixivUtil2.py",
+            "cwd": "${workspaceFolder}",
+            "python": "${workspaceFolder}/env/bin/python",
+            "args": [
+                "-s", "f1",
+                "-x",
+                "--ep", "1"
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "env": {
+                "PYTHONUNBUFFERED": "1"
+            }
+        },
+        {
+            "name": "PixivUtil2 - Opción F1 (sin resume)",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/PixivUtil2.py",
+            "cwd": "${workspaceFolder}",
+            "python": "${workspaceFolder}/env/bin/python",
+            "args": [
+                "-s", "f1",
+                "-x",
+                "--ep", "1",
+                "--no-resume"
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "env": {
+                "PYTHONUNBUFFERED": "1"
+            }
+        },
+        {
+            "name": "PixivUtil2 (interactive menu)",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/PixivUtil2.py",
+            "cwd": "${workspaceFolder}",
+            "python": "${workspaceFolder}/env/bin/python",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "env": {
+                "PYTHONUNBUFFERED": "1"
+            }
+        }
+    ]
+}

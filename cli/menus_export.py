@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import sys
 
+import pyperclip
 from colorama import Back, Fore, Style
 
 import common.PixivBrowserFactory as PixivBrowserFactory

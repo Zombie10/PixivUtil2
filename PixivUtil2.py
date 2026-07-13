@@ -188,13 +188,16 @@ def main():
     (options, args) = parser.parse_args()
 
     op = options.start_action
-    if op in __valid_options:
+    # Re-read after setup_option_parser() (writes via state.set_valid_options).
+    valid = __valid_options or getattr(state, "valid_options", ())
+    if op in valid:
         op_is_valid = True
+        __valid_options = valid
     elif op is None:
         op_is_valid = False
     else:
         op_is_valid = False
-        parser.error('%s is not valid operation' % op)
+        parser.error('%s is not valid operation (valid: %s)' % (op, ", ".join(valid) if valid else "none configured"))
         # Yavos: use print option instead when program should be running even with this error
 
     ewd = options.exit_when_done
@@ -359,6 +362,8 @@ def main():
         result = doLogin(password, username)
 
         if result:
+            # Pass CLI start_action as selection (main_loop used to read global `op`).
+            selection = op
             np_is_valid, op_is_valid, selection = main_loop(ewd, op_is_valid, selection, np_is_valid, args, options)
 
             if start_iv:  # Yavos: adding start_irfan_view-handling

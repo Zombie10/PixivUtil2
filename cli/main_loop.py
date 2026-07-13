@@ -74,8 +74,11 @@ def main_loop(ewd, op_is_valid, selection, np_is_valid_local, args, options):
                 state.error_list = list()
                 state.set_error_code(1)
 
-            if op_is_valid:  # Yavos (next 3 lines): if commandline then use it
-                selection = op
+            if op_is_valid:
+                # Command-line -s value is passed in as `selection` from main().
+                # (Previously this used a global `op` that no longer exists after the cli/ split.)
+                if not selection:
+                    raise RuntimeError("op_is_valid but no selection/start_action was provided")
             else:
                 selection = state.menu()
 

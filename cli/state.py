@@ -81,6 +81,14 @@ def set_error_code(code: int) -> None:
     _m().ERROR_CODE = code
 
 
+def set_valid_options(options) -> None:
+    """Write CLI valid start_action list onto the bound main module."""
+    _m().__valid_options = options
+    # Drop any accidental module-level shadow from earlier assignments.
+    if "valid_options" in globals():
+        del globals()["valid_options"]
+
+
 def set_blacklist_tags(value) -> None:
     _m().__blacklistTags = value
 
