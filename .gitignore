@@ -22,6 +22,12 @@ listfanbox.txt
 *.log
 *.bat
 db.sqlite
+db.sqlite-wal
+db.sqlite-shm
+*.db-wal
+*.db-shm
+*.sqlite-wal
+*.sqlite-shm
 *.pyc
 *.zip
 *.7z
