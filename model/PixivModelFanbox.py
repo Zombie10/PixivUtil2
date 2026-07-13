@@ -7,6 +7,7 @@ import sys
 from typing import List, Optional
 
 import demjson3
+import common.PixivJson as PixivJson
 from bs4 import BeautifulSoup
 
 import common.datetime_z as datetime_z
@@ -337,7 +338,7 @@ class FanboxPost(object):
                                  errorCode=PixivException.MISSING_CONFIG,
                                  htmlPage=None)
 
-        cfg = demjson3.decode_file(content_provider_path)
+        cfg = PixivJson.decode_file(content_provider_path)
         embed_cfg = cfg["urlEmbedConfig"]
         current_provider = embedData["type"]
 
@@ -386,7 +387,7 @@ class FanboxPost(object):
                                  errorCode=PixivException.MISSING_CONFIG,
                                  htmlPage=None)
 
-        cfg = demjson3.decode_file(content_provider_path)
+        cfg = PixivJson.decode_file(content_provider_path)
         embed_cfg = cfg["embedConfig"]
         current_provider = embedData["serviceProvider"]
 
@@ -621,7 +622,7 @@ class FanboxArtist(object):
     @classmethod
     def parseArtistIds(cls, page):
         ids = list()
-        js = demjson3.decode(page)
+        js = PixivJson.decode(page)
 
         if "error" in js and js["error"]:
             raise PixivException("Error when requesting Fanbox", 9999, page)
@@ -636,7 +637,7 @@ class FanboxArtist(object):
     @classmethod
     def parseArtistCreatorIDs(cls, page):
         ids = list()
-        js = demjson3.decode(page)
+        js = PixivJson.decode(page)
 
         if "error" in js and js["error"]:
             raise PixivException("Error when requesting Fanbox", 9999, page)
@@ -664,7 +665,7 @@ class FanboxArtist(object):
         return f"FanboxArtist({self.artistId}, {self.creatorId}, {self.artistName})"
 
     def setPages(self, page):
-        js = demjson3.decode(page)
+        js = PixivJson.decode(page)
 
         if "error" in js and js["error"]:
             raise PixivException(f"Error when requesting Fanbox artist pages: {self.artistId}", 9999, page)
@@ -674,7 +675,7 @@ class FanboxArtist(object):
             self.Pages = js_body
 
     def parsePosts(self, page) -> List[FanboxPost]:
-        js = demjson3.decode(page)
+        js = PixivJson.decode(page)
 
         if "error" in js and js["error"]:
             raise PixivException(f"Error when requesting Fanbox artist: {self.artistId}", 9999, page)

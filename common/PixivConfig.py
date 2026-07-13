@@ -257,6 +257,21 @@ class PixivConfig():
         for item in self.__items:
             setattr(self, item.option, item.process_value(item.default))
 
+    def snapshot(self) -> "PixivConfig":
+        """
+        Return a shallow copy of this config for a single run.
+
+        Menus may still call loadConfig() on the live object; handlers that
+        want a frozen view can take snapshot() at the start of a job.
+        Does not deep-copy nested objects (there are none today).
+        downloadWorkers default remains whatever is configured (default 1).
+        """
+        clone = PixivConfig()
+        for item in PixivConfig.__items:
+            setattr(clone, item.option, getattr(self, item.option))
+        clone.configFileLocation = getattr(self, "configFileLocation", clone.configFileLocation)
+        return clone
+
     @property
     def proxy(self):
         value = getattr(self, "proxyAddress", None)

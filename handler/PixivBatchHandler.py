@@ -4,6 +4,8 @@ import json
 import os
 from copy import deepcopy
 
+from typing import Any
+
 import handler.PixivArtistHandler as PixivArtistHandler
 import common.PixivBrowserFactory as PixivBrowserFactory
 import common.PixivConfig as PixivConfig
@@ -11,7 +13,6 @@ import common.PixivHelper as PixivHelper
 import handler.PixivImageHandler as PixivImageHandler
 import handler.PixivSketchHandler as PixivSketchHandler
 import handler.PixivTagsHandler as PixivTagsHandler
-import PixivUtil2
 
 _default_batch_filename = "./batch_job.json"
 
@@ -87,7 +88,7 @@ def handle_members(caller, job, job_name, job_option):
                                                       title_prefix=f"{job_name} ")
 
 
-def handle_images(caller: PixivUtil2, job, job_name, job_option):
+def handle_images(caller: Any, job, job_name, job_option):
     image_ids = list()
     if "image_ids" in job:
         image_ids = job["image_ids"]
@@ -108,7 +109,7 @@ def handle_images(caller: PixivUtil2, job, job_name, job_option):
     print("done.")
 
 
-def handle_tags(caller: PixivUtil2, job, job_name, job_option):
+def handle_tags(caller: Any, job, job_name, job_option):
     tags = None
     if "tags" in job and len(job["tags"]) > 0:
         tags = job["tags"]
@@ -132,13 +133,13 @@ def handle_tags(caller: PixivUtil2, job, job_name, job_option):
     if "start_date" in job and len(job["start_date"]) == 10:
         try:
             start_date = PixivHelper.check_date_time(job["start_date"])
-        except BaseException:
+        except Exception:
             raise Exception(f"Invalid start_date: {job['start_date']} in {job_name}.")
     end_date = None
     if "end_date" in job and len(job["end_date"]) == 10:
         try:
             end_date = PixivHelper.check_date_time(job["end_date"])
-        except BaseException:
+        except Exception:
             raise Exception(f"Invalid end_date: {job['end_date']} in {job_name}.")
     member_id = None
     if "member_id" in job:
@@ -180,7 +181,7 @@ def handle_tags(caller: PixivUtil2, job, job_name, job_option):
                                   type_mode=type_mode)
 
 
-def process_batch_job(caller: PixivUtil2, batch_file=None):
+def process_batch_job(caller: Any, batch_file=None):
     PixivHelper.get_logger().info('Batch Mode from json (b).')
     caller.set_console_title("Batch Menu")
 

@@ -1,95 +1,91 @@
 # Refactoring roadmap
 
-PixivUtil2 grew for ~15 years as a CLI script. A full rewrite is possible but high-risk for a production tool with multi‑GB SQLite DBs. This document describes **what is wrong**, **what we already fixed**, and **safe next waves**.
+PixivUtil2 grew for ~15 years as a CLI script. Refactors are applied in **waves** that preserve behaviour for daily `run_z` / `run_f1` automation and multi‑GB SQLite DBs.
 
-## Goals
+## Hard constraints (do not violate)
 
-1. Keep behaviour stable for daily `run_z` / `run_f1` automation.
-2. Remove clear bad practices when the fix is localized.
-3. Make the hot paths (DB, FANBOX, downloads) faster and easier to test.
-4. Avoid a big-bang rewrite of 15k+ lines in one PR.
+1. **No incompatible SQLite schema changes** — only additive columns/indexes via `ensure_column` / `CREATE INDEX IF NOT EXISTS`.
+2. **Do not raise `downloadWorkers` default** — stays `1` (ban risk).
+3. **Do not remove experimental features** without an explicit deprecation path (batch job `b`, rankings, etc. stay).
 
-## Known bad practices (legacy)
+## Wave 1 — done
 
-| Issue | Where | Why it hurts |
-|-------|--------|--------------|
-| `except BaseException` | DB / CLI / handlers | Swallows `KeyboardInterrupt` / `SystemExit` |
-| Silent `try/except ALTER` | `createDatabase` | Hides real DB errors |
-| Global module state | `PixivUtil2.py` | Hard to test; hidden coupling |
-| `caller = sys.modules[__name__]` | all handlers | Handlers depend on CLI entrypoint |
-| God files | `PixivUtil2`, `PixivDBManager`, `PixivBrowserFactory` | Hard to navigate and review |
-| Few indexes (historical) | SQLite | Full scans on multi‑million image DBs |
-| DEBUG logs dumping full JSON | browser factory | Huge logs, slow I/O, privacy risk |
-| No DI / interfaces | everywhere | Mocks and unit tests are painful |
+- FANBOX isolation / checkpoint / normalize  
+- SQLite indexes + WAL pragmas + `ensure_column`  
+- `except BaseException` → `Exception`  
+- `AppContext` + `get_caller()`  
+- Run summary, cleanup, retry backoff  
+- Docs: `docs/FORK.md`
 
-## Wave 1 (done in this fork)
+## Wave 2 — done (this fork)
 
-- [x] FANBOX error isolation + API normalize + checkpoint
-- [x] SQLite indexes + connection pragmas (`WAL`, cache, mmap)
-- [x] Schema upgrades via `ensure_column()` instead of blind `ALTER` try/except
-- [x] `except BaseException` → `except Exception` in `PixivDBManager` / `PixivUtil2`
-- [x] `AppContext` facade + `get_caller()` (handlers no longer receive the raw module object at call sites)
-- [x] Retry backoff, run summary, startup cleanup
-- [x] Docs: `docs/FORK.md`, this file
+| Item | Implementation |
+|------|----------------|
+| Split CLI menus | Package `cli/` (`helpers`, `menus_*`, `main_loop`, `option_parser`) |
+| Runtime binding | `cli.state.bind(main_module)` — menus never import PixivUtil2 |
+| Thin entrypoint | `PixivUtil2.py` ~400 lines (globals + `main` + re-exports) |
+| Repository façade | `db/repositories.py` — `Member` / `Image` / `Fanbox` / `Sketch` over existing DB API |
+| Explicit handler context | FANBOX handler uses `Repositories.from_caller(caller)` |
+| Structured log limits | `PixivHelper.log_payload()` truncates large API bodies |
+| Browser seam | `common/browser/` re-exports `get_browser` (full split deferred safely) |
 
-## Wave 2 (recommended next)
+## Wave 3 — done (partial, safe subset)
 
-Priority order:
+| Item | Implementation |
+|------|----------------|
+| Config snapshot | `PixivConfig.snapshot()` for per-run frozen views |
+| Safer JSON | `common/PixivJson.decode()` — stdlib `json` first, `demjson3` fallback |
+| FANBOX/Browser decode | Hot paths use `PixivJson.decode` + truncated logging |
+| Metadata thread pool | **Not enabled by default** (would change rate-limit behaviour) — left as future opt-in |
+| Plugin sources | Deferred (experimental features kept as-is) |
 
-1. **Split `PixivUtil2.py` menu layer**  
-   Move each `menu_*` function into `cli/commands_*.py`. Keep `main()` as composition root only.
+## Layout after waves 1–3
 
-2. **Explicit handler signatures**  
-   Change handlers from `process_*(caller, config, ...)` to `process_*(ctx: AppContext, ...)` and stop reading `caller.__config__` when `config` is already passed.
+```
+PixivUtil2.py          # entrypoint + process globals
+cli/
+  state.py             # bind() + accessors for menus
+  helpers.py           # menu UI, read_lists, page options
+  option_parser.py
+  main_loop.py
+  menus_download.py
+  menus_fanbox.py
+  menus_sketch.py
+  menus_export.py
+common/
+  PixivAppContext.py
+  PixivJson.py
+  PixivRunStats.py / Checkpoint / Cleanup
+  browser/             # stable import seam
+db/
+  repositories.py      # domain façade (no schema change)
+handler/               # download orchestration
+model/                 # response models
+```
 
-3. **Repository layer for SQLite**  
-   Group `select*` / `insert*` by domain (`MemberRepo`, `ImageRepo`, `FanboxRepo`) inside `db/`. Keep `PixivDBManager` as a façade temporarily.
+## Future waves (optional)
 
-4. **Narrow browser factory**  
-   Split Pixiv / FANBOX / Sketch clients. Inject `session` instead of subclassing `mechanize.Browser` forever.
+1. Move FANBOX/Sketch HTTP methods from `PixivBrowserFactory` into `common/browser/fanbox.py` / `sketch.py` with the same public methods (behaviour-preserving cut/paste + tests).
+2. Handler signatures: `process_*(ctx: AppContext, config: PixivConfig, ...)` with type hints end-to-end.
+3. Optional `metadataWorkers` config (default 1) for parallel **metadata only**, never changing default download concurrency.
+4. Gradual mypy on `common/` and `cli/`.
 
-5. **Structured logging**  
-   Never log full API bodies at INFO; gate raw JSON behind DEBUG and a size limit.
+## Tests to run after refactors
 
-6. **Type hints + mypy on `common/` and `handler/`**  
-   Gradual, file by file.
-
-## Wave 3 (larger architecture)
-
-- Optional async or bounded thread pool for **metadata** fetches only (downloads already support `downloadWorkers`).
-- Config as immutable snapshot per run (reload creates new object).
-- Plugin-style download sources (Pixiv / FANBOX / Sketch).
-- Replace demjson3 with stdlib `json` where possible.
+```bash
+source env/bin/activate
+python -m unittest discover -s test -p 'test_PixivModel_fanbox.py'
+python -m unittest discover -s test -p 'test_PixivAppContext_DB.py'
+python -m unittest discover -s test -p 'test_PixivRunStats_Checkpoint_Cleanup.py'
+python -m unittest discover -s test -p 'test_PixivJson_Repos_Config.py'
+python -m unittest discover -s test -p 'test_PixivHelper.py'
+python -m unittest discover -s test -p 'test_PixivModel.py'
+python PixivUtil2.py --help
+```
 
 ## What not to do
 
-- Do not rewrite models against live HTML scraping that still works via AJAX JSON.
-- Do not remove SQLite compatibility for existing multi‑GB `db.sqlite` files.
-- Do not force concurrent downloads default > 1 (ban risk).
-- Do not “clean” by deleting experimental batch/ranking features without a deprecation path.
-
-## How to contribute a safe refactor
-
-1. Add/adjust a unit test in `test/` first when behaviour is subtle.
-2. Keep a thin compatibility shim if you rename symbols handlers import.
-3. Run:
-
-```bash
-python -m unittest discover -s test -p 'test_PixivModel_fanbox.py'
-python -m unittest discover -s test -p 'test_PixivRunStats_Checkpoint_Cleanup.py'
-python -m unittest discover -s test -p 'test_PixivHelper.py'
-python -m py_compile PixivUtil2.py PixivDBManager.py common/*.py handler/*.py
-```
-
-4. Prefer many small PRs over one mega-diff.
-
-## Performance notes (already applied)
-
-| Change | Effect |
-|--------|--------|
-| `PRAGMA journal_mode=WAL` | Better concurrent read/write |
-| `PRAGMA cache_size=-65536` | ~64MB page cache |
-| `PRAGMA mmap_size=256MB` | Faster reads on large DB files |
-| Indexes on `member_id` / dates | Avoid full table scans |
-| `checkUpdatedLimit*` defaults | Stop early on daily syncs |
-| `logLevel=INFO` | Less I/O during long runs |
+- Rewrite models against live HTML that still works via AJAX JSON.
+- Force concurrent downloads default > 1.
+- Delete batch/ranking/sketch features without deprecation.
+- Change primary keys or drop columns on existing user databases.

@@ -189,8 +189,12 @@ Set `checkUpdatedLimit*` to `0` only when you intentionally want a full re-scan.
 | `common/PixivCleanup.py` | url_list / log housekeeping |
 | `common/FirefoxCookieReader.py` | Read FANBOX cookies from Firefox |
 | `common/PixivAppContext.py` | Handler context façade (replaces passing `sys.modules`) |
+| `common/PixivJson.py` | stdlib JSON + demjson3 fallback |
+| `cli/` | Menus / option parser / main loop (split from entrypoint) |
+| `db/repositories.py` | Domain repos over PixivDBManager (no schema break) |
+| `common/browser/` | Stable import seam for the browser client |
 
-Refactoring plan (waves 2–3): **[docs/REFACTORING.md](REFACTORING.md)**
+Architecture / waves: **[docs/REFACTORING.md](REFACTORING.md)**
 
 ---
 

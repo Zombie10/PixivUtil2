@@ -1141,6 +1141,7 @@ Summary:
 | Network | Exponential retry backoff; optional `downloadWorkers` for multi-file posts |
 | Auth | Firefox cookie reader for FANBOX (`cookieFanboxFromBrowser`) |
 | Defaults | `logLevel=INFO`, `checkUpdatedLimit=5`, `checkUpdatedLimitFanbox=5` |
+| Architecture | `cli/` menus, `db/repositories`, `PixivJson`, `AppContext` (see [docs/REFACTORING.md](docs/REFACTORING.md)) |
 
 ```sh
 ./run_z.sh 5 4

@@ -20,8 +20,7 @@ def process_member_metadata(caller,
                             tags=None,
                             title_prefix="",
                             notifier=None):
-    # caller function/method
-    # TODO: ideally to be removed or passed as argument
+    # caller: AppContext (or main module) providing __dbManager__ / set_console_title
     db = caller.__dbManager__
 
     if notifier is None:

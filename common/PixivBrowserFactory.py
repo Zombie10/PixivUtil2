@@ -15,6 +15,7 @@ from urllib.request import Request
 from typing import List, Literal, Tuple, Union
 
 import demjson3
+import common.PixivJson as PixivJson
 import mechanize
 import socks
 from bs4 import BeautifulSoup
@@ -1136,7 +1137,7 @@ class PixivBrowser(mechanize.Browser):
         if self._config.useLocalTimezone:
             _tzInfo = PixivHelper.LocalUTCOffsetTimezone()
 
-        js = demjson3.decode(response)
+        js = PixivJson.decode(response)
         if "error" in js and js["error"]:
             raise PixivException("Error when requesting Fanbox", 9999, js)
 
@@ -1176,7 +1177,7 @@ class PixivBrowser(mechanize.Browser):
 
             res = self.open_with_retry(req)
             response = res.read()
-            PixivHelper.get_logger().debug(response.decode('utf8'))
+            PixivHelper.log_payload('debug', 'FANBOX response', response)
             res.close()
 
             artist.setPages(response)
@@ -1203,7 +1204,7 @@ class PixivBrowser(mechanize.Browser):
 
         res = self.open_with_retry(req)
         response = res.read()
-        PixivHelper.get_logger().debug(response.decode('utf8'))
+        PixivHelper.log_payload('debug', 'FANBOX response', response)
         res.close()
         posts = artist.parsePosts(response)
         return posts
@@ -1247,7 +1248,7 @@ class PixivBrowser(mechanize.Browser):
                     raise PixivException("Fanbox post not found!", PixivException.OTHER_ERROR)
                 raise
             p_response = p_res.text
-            PixivHelper.get_logger().debug(p_response)
+            PixivHelper.log_payload('debug', 'FANBOX post.info', p_response)
             p_res.close()
             if p_response.lstrip().startswith("{"):
                 break
@@ -1258,7 +1259,7 @@ class PixivBrowser(mechanize.Browser):
             else:
                 break
 
-        js = demjson3.decode(p_response)
+        js = PixivJson.decode(p_response)
         # Normalize body.post wrapper (post.info) and other shape variants.
         body = js.get("body")
         normalized = FanboxArtist.normalize_post_payload(body)

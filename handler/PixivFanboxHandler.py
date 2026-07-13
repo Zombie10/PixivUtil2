@@ -166,18 +166,19 @@ def process_fanbox_artist_by_id(caller, config, artist_id, end_page, title_prefi
 
 
 def process_fanbox_post(caller, config, post: PixivModelFanbox.FanboxPost, artist):
-    # caller function/method
-    # TODO: ideally to be removed or passed as argument
-    db = caller.__dbManager__
+    # caller: AppContext (or main module) — prefer explicit repository façade.
+    from db.repositories import Repositories
+    repos = Repositories.from_caller(caller)
+    db = repos.raw
     br = PixivBrowserFactory.getBrowser()
 
-    db.insertPost(artist.artistId, post.imageId, post.imageTitle, post.feeRequired, post.worksDate, post.type)
+    repos.fanbox.insert_post(artist.artistId, post.imageId, post.imageTitle, post.feeRequired, post.worksDate, post.type)
 
     post_files = []
 
     flag_processed = False
     if config.checkDBProcessHistory:
-        result = db.selectPostByPostId(post.imageId)
+        result = repos.fanbox.select_post(post.imageId)
         if result:
             updated_date = result[5]
             if updated_date is not None and post.updatedDateDatetime <= datetime_z.parse_datetime(updated_date):
@@ -316,9 +317,9 @@ def process_fanbox_post(caller, config, post: PixivModelFanbox.FanboxPost, artis
             PixivHelper.write_url_in_description(post, config.urlBlacklistRegex, config.urlDumpFilename)
     finally:
         if len(post_files) > 0:
-            db.insertPostImages(post_files)
+            repos.fanbox.insert_post_images(post_files)
 
-    db.updatePostUpdateDate(post.imageId, post.updatedDate)
+    repos.fanbox.update_post_date(post.imageId, post.updatedDate)
     return PixivConstant.PIXIVUTIL_OK
 
 

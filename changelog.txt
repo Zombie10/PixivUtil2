@@ -1,3 +1,12 @@
+20260713c (fork / Zombie10) — refactor waves 2–3
+- Split CLI into cli/ package (menus, main_loop, option_parser) with cli.state.bind()
+- Thin PixivUtil2.py entrypoint (~400 lines) re-exporting menus for compatibility
+- db/repositories.py domain façade (Member/Image/Fanbox/Sketch) — no schema changes
+- PixivJson.decode (json first, demjson3 fallback); truncated log_payload for API bodies
+- PixivConfig.snapshot() for per-run config copies; downloadWorkers default remains 1
+- common/browser import seam; FANBOX handler uses Repositories
+- Constraints preserved: no schema breaks, no higher default download concurrency, experimental features kept
+
 20260713b (fork / Zombie10) — refactor wave 1
 - PixivDBManager: WAL/pragmas, ensure_column() schema upgrades, Exception instead of BaseException
 - AppContext + get_caller() so handlers are not passed sys.modules[__name__] at call sites

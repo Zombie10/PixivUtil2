@@ -102,6 +102,38 @@ def set_log_level(level):
     get_logger(level).setLevel(level)
 
 
+def log_payload(level: str, message: str, payload, *, max_chars: int = 4000) -> None:
+    """
+    Structured-ish debug logging for large API bodies.
+    Truncates payload so daily runs do not fill disks with full JSON dumps.
+    """
+    try:
+        if isinstance(payload, bytes):
+            text = payload.decode("utf-8", errors="replace")
+        else:
+            text = str(payload)
+    except Exception:
+        text = repr(payload)
+
+    truncated = False
+    if max_chars is not None and max_chars > 0 and len(text) > max_chars:
+        text = text[:max_chars] + f"... [truncated {len(text) - max_chars} chars]"
+        truncated = True
+
+    logger = get_logger()
+    lvl = (level or "debug").lower()
+    suffix = " (truncated)" if truncated else ""
+    line = f"{message}{suffix}: {text}"
+    if lvl == "info":
+        logger.info(line)
+    elif lvl in ("warn", "warning"):
+        logger.warning(line)
+    elif lvl == "error":
+        logger.error(line)
+    else:
+        logger.debug(line)
+
+
 def sanitize_filename(name, rootDir=None):
     '''Replace reserved character/name with underscore (windows), rootDir is not sanitized.'''
     # get the absolute rootdir
