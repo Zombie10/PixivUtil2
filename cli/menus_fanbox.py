@@ -71,9 +71,11 @@ def menu_fanbox_download_from_list(op_is_valid, via, args, options):
     PixivHelper.print_and_log("info", f"Found {len(ids)} artist(s) in {via_type} list")
     PixivHelper.print_and_log(None, f"{ids}")
 
-    # Optional checkpoint/resume for long FANBOX list runs.
+    # Checkpoint = crash recovery mid-list only (not "skip forever").
+    # After a full successful pass we clear it so the next daily f1 re-scans everyone.
     checkpoint = None
     use_checkpoint = getattr(state.config, "enableCheckpoint", True)
+    run_aborted = False
     if use_checkpoint:
         checkpoint_path = getattr(state.config, "checkpointPathFanbox", "") or f"./checkpoint_fanbox_{via_type}.json"
         checkpoint = PixivCheckpoint.PixivCheckpoint(checkpoint_path, mode=f"fanbox_{via_type}")
@@ -82,18 +84,25 @@ def menu_fanbox_download_from_list(op_is_valid, via, args, options):
             resume = False
             checkpoint.clear()
             checkpoint = PixivCheckpoint.PixivCheckpoint(checkpoint_path, mode=f"fanbox_{via_type}")
+            PixivHelper.print_and_log("info", f"Checkpoint cleared (--no-resume): {checkpoint_path}")
         if resume and checkpoint.completed:
             pending = checkpoint.filter_pending(ids)
-            PixivHelper.print_and_log(
-                "info",
-                f"Resuming FANBOX {via_type}: {len(checkpoint.completed)} done, {len(pending)} pending "
-                f"(checkpoint: {checkpoint_path})",
-            )
-            ids = pending
-            if not ids:
-                PixivHelper.print_and_log("info", "All artists already completed in checkpoint.")
-                PixivRunStats.finish_stats(PixivHelper.print_and_log)
-                return
+            if pending:
+                PixivHelper.print_and_log(
+                    "info",
+                    f"Resuming FANBOX {via_type}: {len(checkpoint.completed)} done, {len(pending)} pending "
+                    f"(checkpoint: {checkpoint_path})",
+                )
+                ids = pending
+            else:
+                # Previous run finished everyone — start a fresh daily scan, not a no-op exit.
+                PixivHelper.print_and_log(
+                    "info",
+                    f"Previous FANBOX {via_type} run already finished all artists; "
+                    f"clearing checkpoint and starting a new full pass ({checkpoint_path}).",
+                )
+                checkpoint.clear()
+                checkpoint = PixivCheckpoint.PixivCheckpoint(checkpoint_path, mode=f"fanbox_{via_type}")
 
     total = len(ids)
     for index, artist_id in enumerate(ids, start=1):
@@ -117,6 +126,7 @@ def menu_fanbox_download_from_list(op_is_valid, via, args, options):
                 PixivHelper.print_and_log("info", f"Artist id: {artist_id}, processing aborted")
                 if checkpoint is not None:
                     checkpoint.mark_failed(artist_id)
+                run_aborted = True
                 break
             else:
                 continue
@@ -139,6 +149,14 @@ def menu_fanbox_download_from_list(op_is_valid, via, args, options):
             if checkpoint is not None:
                 checkpoint.mark_failed(artist_id)
             continue
+
+    # Full pass finished (not aborted): drop checkpoint so next daily f1 is a fresh scan.
+    if checkpoint is not None and not run_aborted:
+        checkpoint.clear()
+        PixivHelper.print_and_log(
+            "info",
+            f"FANBOX {via_type} pass finished; checkpoint cleared for next run.",
+        )
 
     PixivRunStats.finish_stats(PixivHelper.print_and_log)
 
