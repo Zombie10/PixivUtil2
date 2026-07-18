@@ -33,7 +33,18 @@ class PixivArtist:
             if not fromImage:
                 payload = json.loads(page)
                 if payload["error"]:
-                    raise PixivException(payload["message"], errorCode=PixivException.OTHER_MEMBER_ERROR, htmlPage=page)
+                    message = payload.get("message") or "Unknown member error"
+                    # Normalize deleted/left-account messages (JP/CN/EN) to USER_ID_NOT_EXISTS.
+                    msg_l = str(message).lower()
+                    not_exists_markers = (
+                        "不存在", "离开", "見つかりません", "存在しません",
+                        "not exist", "doesn't exist", "does not exist", "left pixiv", "user not found",
+                    )
+                    if any(m in str(message) or m in msg_l for m in not_exists_markers):
+                        code = PixivException.USER_ID_NOT_EXISTS
+                    else:
+                        code = PixivException.OTHER_MEMBER_ERROR
+                    raise PixivException(message, errorCode=code, htmlPage=page)
                 if payload["body"] is None:
                     raise PixivException("Missing body content, possible artist id doesn't exists.",
                                          errorCode=PixivException.USER_ID_NOT_EXISTS, htmlPage=page)

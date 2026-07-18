@@ -22,14 +22,24 @@ def process_fanbox_artist_by_id(caller, config, artist_id, end_page, title_prefi
     try:
         artist = br.fanboxGetArtistById(artist_id)
     except PixivException as pex:
-        PixivHelper.print_and_log("error", f"Error getting FANBOX artist by id: {artist_id} ==> {pex.message}")
-        if pex.errorCode != PixivException.USER_ID_SUSPENDED:
+        # Pixiv profile missing/deleted/suspended must not block FANBOX downloads.
+        soft_codes = (
+            PixivException.USER_ID_SUSPENDED,
+            PixivException.USER_ID_NOT_EXISTS,
+            PixivException.OTHER_MEMBER_ERROR,
+            PixivException.NO_IMAGES,
+        )
+        PixivHelper.print_and_log(
+            "warn" if pex.errorCode in soft_codes else "error",
+            f"Error getting FANBOX artist by id: {artist_id} ==> {pex.message}",
+        )
+        if pex.errorCode not in soft_codes:
             stats.record_artist_error(f"artist {artist_id}: {pex.message}")
             return False
         try:
             artist = br.fanboxGetArtistById(artist_id, for_suspended=True)
         except Exception as ex:
-            PixivHelper.print_and_log("error", f"Error getting suspended FANBOX artist {artist_id}: {ex}")
+            PixivHelper.print_and_log("error", f"Error getting FANBOX-only artist {artist_id}: {ex}")
             stats.record_artist_error(f"artist {artist_id}: {ex}")
             return False
 
@@ -48,7 +58,9 @@ def process_fanbox_artist_by_id(caller, config, artist_id, end_page, title_prefi
                     if artist.artistName:
                         PixivHelper.print_and_log("info", f"Using FANBOX artist name: {artist.artistName}")
                     else:
-                        artist.artistName = input(f"Please input %artist% for {artist_id}: ").strip()
+                        # Non-interactive fallback (no blocking input during batch f1)
+                        artist.artistName = artist.artistName or artist.creatorId or str(artist_id)
+                        PixivHelper.print_and_log("info", f"Using fallback %artist%: {artist.artistName}")
                 if token_flag:
                     if artist.artistToken:
                         PixivHelper.print_and_log("info", f"Using FANBOX artist token: {artist.artistToken}")
@@ -56,7 +68,8 @@ def process_fanbox_artist_by_id(caller, config, artist_id, end_page, title_prefi
                         artist.artistToken = artist.creatorId
                         PixivHelper.print_and_log("info", f"Using creatorId as member_token: {artist.artistToken}")
                     else:
-                        artist.artistToken = input(f"Please input %member_token% for {artist_id}: ").strip()
+                        artist.artistToken = str(artist_id)
+                        PixivHelper.print_and_log("info", f"Using fallback %member_token%: {artist.artistToken}")
     except Exception as ex:
         PixivHelper.print_and_log("error", f"Unexpected error getting FANBOX artist {artist_id}: {ex}")
         PixivHelper.get_logger().exception("FANBOX artist lookup failed for %s", artist_id)

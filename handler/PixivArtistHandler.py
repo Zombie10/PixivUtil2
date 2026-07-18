@@ -28,6 +28,16 @@ def process_member_metadata(caller,
 
     list_page = None
 
+    try:
+        member_id_int = int(member_id)
+    except (TypeError, ValueError):
+        PixivHelper.print_and_log('warn', f'Skipping invalid Member Id metadata: {member_id!r}')
+        return
+    if member_id_int <= 0:
+        PixivHelper.print_and_log('warn', f'Skipping invalid Member Id metadata: {member_id_int}')
+        return
+    member_id = member_id_int
+
     msg = Fore.YELLOW + Style.BRIGHT + f'Processing Member Metadata: {member_id}' + Style.RESET_ALL
     PixivHelper.print_and_log('info', msg)
     notifier(type="MEMBER", message=msg)
@@ -47,6 +57,14 @@ def process_member_metadata(caller,
                 db.setIsDeletedFlagForMemberId(int(member_id))
                 PixivHelper.print_and_log('info', f'Set IsDeleted for MemberId: {member_id} not exist.')
             elif ex.errorCode == PixivException.OTHER_MEMBER_ERROR:
+                # "User left pixiv / id does not exist" often arrives as OTHER_MEMBER_ERROR.
+                msg_l = (ex.message or "").lower()
+                if any(s in (ex.message or "") for s in ("离开", "不存在", "見つかりません")) or "not exist" in msg_l:
+                    try:
+                        db.setIsDeletedFlagForMemberId(int(member_id))
+                        PixivHelper.print_and_log('info', f'Set IsDeleted for MemberId: {member_id} (left/missing).')
+                    except Exception:
+                        pass
                 PixivHelper.print_and_log(None, ex.message)
                 caller.__errorList.append(dict(type="Member", id=str(member_id), message=ex.message, exception=ex))
             return
@@ -85,7 +103,7 @@ def process_member_metadata(caller,
                 (int(member_id), name, save_folder, db_created_date, last_image, is_deleted, member_token),
             )
             conn.commit()
-        except BaseException:
+        except Exception:
             conn.rollback()
             raise
         finally:
@@ -134,6 +152,17 @@ def process_member(caller,
         notifier = PixivHelper.dummy_notifier
 
     list_page = None
+
+    try:
+        member_id_int = int(member_id)
+    except (TypeError, ValueError):
+        PixivHelper.print_and_log('warn', f'Skipping invalid Member Id: {member_id!r}')
+        return
+    if member_id_int <= 0:
+        # Option z can surface "0" from bad bookmark payloads; never hit the API.
+        PixivHelper.print_and_log('warn', f'Skipping invalid Member Id: {member_id_int}')
+        return
+    member_id = member_id_int
 
     msg = Fore.YELLOW + Style.BRIGHT + f'Processing Member Id: {member_id}' + Style.RESET_ALL
     PixivHelper.print_and_log('info', msg)

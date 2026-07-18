@@ -703,6 +703,16 @@ def get_ids_from_csv(ids_str, is_string=False):
         ids = re.findall(r"(?:series|users|\s|,|^|artworks|posts)\/?(\d+)", ids_str)
         if not ids:
             print_and_log('error', u"Input: {0} is not valid".format(ids_str))
+    # Drop invalid placeholders (bookmark export can yield "0").
+    cleaned = []
+    for item in ids:
+        if str(item).strip() in ("", "0"):
+            continue
+        cleaned.append(item)
+    dropped = len(ids) - len(cleaned)
+    if dropped:
+        print_and_log('warn', f"Dropped {dropped} invalid id(s) (0/empty) from input list.")
+    ids = cleaned
     if len(ids) > 1:
         print_and_log('info', u"Found {0} ids".format(len(ids)))
     return ids

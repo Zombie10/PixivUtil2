@@ -273,13 +273,34 @@ class FanboxClientMixin:
                                   tzInfo=_tzInfo)
 
             if not for_suspended:
-                # pixivArtist = PixivArtist(artist.artistId)
-                # self.getMemberInfoWhitecube(artist.artistId, pixivArtist)
-                # Issue #827, less efficient call, but it can avoid oAuth issue
-                (pixivArtist, _) = self.getMemberPage(artist.artistId)
-
-                artist.artistName = pixivArtist.artistName
-                artist.artistToken = pixivArtist.artistToken
+                # Issue #827: enrich with Pixiv profile token/name when available.
+                # Some creators still have FANBOX after leaving/deleting Pixiv —
+                # do not abort FANBOX download in that case.
+                try:
+                    (pixivArtist, _) = self.getMemberPage(artist.artistId)
+                    artist.artistName = pixivArtist.artistName
+                    artist.artistToken = pixivArtist.artistToken
+                except PixivException as ex:
+                    soft_codes = (
+                        PixivException.USER_ID_NOT_EXISTS,
+                        PixivException.USER_ID_SUSPENDED,
+                        PixivException.OTHER_MEMBER_ERROR,
+                        PixivException.NO_IMAGES,
+                    )
+                    if ex.errorCode in soft_codes:
+                        PixivHelper.print_and_log(
+                            "warn",
+                            f"Pixiv profile unavailable for FANBOX creator '{artist.creatorId}' "
+                            f"(userId={artist.artistId}): {ex.message}. "
+                            f"Continuing with FANBOX metadata only.",
+                        )
+                        if not artist.artistToken:
+                            artist.artistToken = artist.creatorId or str(artist.artistId)
+                    else:
+                        raise
+            else:
+                if not artist.artistToken:
+                    artist.artistToken = artist.creatorId or str(artist.artistId)
             return artist
         else:
             raise PixivException("Id does not exist", errorCode=PixivException.USER_ID_NOT_EXISTS)
