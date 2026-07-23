@@ -322,16 +322,39 @@ class FanboxClientMixin:
 
             res = self.open_with_retry(req)
             response = res.read()
-            PixivHelper.log_payload('debug', 'FANBOX response', response)
+            PixivHelper.log_payload('debug', 'FANBOX paginateCreator response', response)
             res.close()
 
-            artist.setPages(response)
+            try:
+                artist.setPages(response)
+            except Exception:
+                # Fallback if API shape changes again: first listCreator page.
+                PixivHelper.print_and_log(
+                    "warn",
+                    f"Could not parse paginateCreator for {artist.creatorId}; falling back to listCreator.",
+                )
+                PixivHelper.log_payload("warn", "FANBOX paginateCreator raw", response, max_chars=800)
+                artist.Pages = [
+                    f"https://api.fanbox.cc/post.listCreator?creatorId={artist.creatorId}&limit=10"
+                ]
+                artist.PageIndex = 0
+
+            if not artist.Pages:
+                raise PixivException(
+                    f"No FANBOX pages for creatorId={artist.creatorId}",
+                    errorCode=PixivException.NO_IMAGES,
+                )
 
             # url = f"https://api.fanbox.cc/post.listCreator?userId={artist.artistId}&limit=10"
             # Issue #1094
             # https://api.fanbox.cc/post.listCreator?creatorId=onartworks&maxPublishedDatetime=2022-02-26%2015%3A57%3A17&maxId=3468213&limit=10
             # url = f"https://api.fanbox.cc/post.listCreator?creatorId={artist.creatorId}&limit=10"
 
+            if artist.PageIndex < 0 or artist.PageIndex >= len(artist.Pages):
+                raise PixivException(
+                    f"FANBOX page index out of range: {artist.PageIndex}/{len(artist.Pages)}",
+                    errorCode=PixivException.OTHER_ERROR,
+                )
             url = artist.Pages[artist.PageIndex]
         elif next_url.startswith("https://"):
             url = next_url

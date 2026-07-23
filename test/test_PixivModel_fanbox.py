@@ -79,6 +79,55 @@ class TestPixivModel_Fanbox(unittest.TestCase):
         })
         self.assertEqual(FanboxArtist.parseArtistIds(page), ["10", "20"])
 
+    def testFanboxPaginateCreatorPageUrlsWrapper(self):
+        # Current FANBOX API: body.pageUrls list (2026+)
+        urls = [
+            "https://api.fanbox.cc/post.listCreator?creatorId=ebiebieshrimp&limit=10",
+            "https://api.fanbox.cc/post.listCreator?creatorId=ebiebieshrimp&firstId=1&limit=10",
+        ]
+        page = json.dumps({"body": {"pageUrls": urls}})
+        artist = FanboxArtist(179511, "ちま", "ebiebieshrimp", None)
+        artist.setPages(page)
+        self.assertEqual(artist.Pages, urls)
+        self.assertEqual(artist.PageIndex, 0)
+        self.assertEqual(artist.Pages[artist.PageIndex], urls[0])
+
+        # Legacy: body is a bare list of URLs
+        page_legacy = json.dumps({"body": urls})
+        artist2 = FanboxArtist(179511, "ちま", "ebiebieshrimp", None)
+        artist2.setPages(page_legacy)
+        self.assertEqual(artist2.Pages, urls)
+
+    def testFanboxListCreatorPostsWrapper(self):
+        # Current listCreator: body.posts list (2026+)
+        posts_payload = {
+            "body": {
+                "posts": [
+                    {
+                        "id": "12182227",
+                        "title": "test post",
+                        "feeRequired": 0,
+                        "publishedDatetime": "2026-07-01T23:00:00+09:00",
+                        "updatedDatetime": "2026-07-01T23:00:00+09:00",
+                        "likeCount": 1,
+                        "type": "image",
+                        "isRestricted": True,
+                        "user": {"userId": "179511", "name": "ちま"},
+                        "creatorId": "ebiebieshrimp",
+                    }
+                ]
+            }
+        }
+        artist = FanboxArtist(179511, "ちま", "ebiebieshrimp", None)
+        artist.Pages = ["https://example/page1", "https://example/page2"]
+        artist.PageIndex = 0
+        result = artist.parsePosts(json.dumps(posts_payload))
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0].imageId, 12182227)
+        self.assertEqual(result[0].imageTitle, "test post")
+        self.assertTrue(artist.hasNextPage)
+        self.assertEqual(artist.nextUrl, "https://example/page2")
+
     def testFanboxArtistPosts(self):
         reader = open('./test_data/Fanbox_artist_posts.json', 'r', encoding="utf-8")
         p = reader.read()

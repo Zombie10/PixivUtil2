@@ -664,15 +664,50 @@ class FanboxArtist(object):
     def __str__(self):
         return f"FanboxArtist({self.artistId}, {self.creatorId}, {self.artistName})"
 
+    @staticmethod
+    def normalize_page_urls(body):
+        """
+        Normalize post.paginateCreator payload to a list of page URLs.
+
+        Historical: body = ["https://api.fanbox.cc/post.listCreator?..."]
+        Current (2026+): body = {"pageUrls": ["https://api.fanbox.cc/post.listCreator?..."]}
+        """
+        if body is None:
+            return []
+        if isinstance(body, list):
+            return [u for u in body if isinstance(u, str) and u]
+        if isinstance(body, dict):
+            for key in ("pageUrls", "pages", "urls", "items"):
+                value = body.get(key)
+                if isinstance(value, list):
+                    return [u for u in value if isinstance(u, str) and u]
+            # Numeric string keys: {"0": "https://...", "1": "https://..."}
+            if body and all(str(k).isdigit() for k in body.keys()):
+                ordered = sorted(body.keys(), key=lambda k: int(k))
+                return [body[k] for k in ordered if isinstance(body[k], str) and body[k]]
+            next_url = body.get("nextUrl")
+            if isinstance(next_url, str) and next_url:
+                return [next_url]
+        return []
+
     def setPages(self, page):
         js = PixivJson.decode(page)
 
         if "error" in js and js["error"]:
             raise PixivException(f"Error when requesting Fanbox artist pages: {self.artistId}", 9999, page)
 
-        if js["body"] is not None:
-            js_body = js["body"]
-            self.Pages = js_body
+        if js.get("body") is not None:
+            self.Pages = self.normalize_page_urls(js["body"])
+            self.PageIndex = 0
+            if not self.Pages:
+                raise PixivException(
+                    f"Empty page URL list for Fanbox artist pages: {self.artistId}",
+                    9999,
+                    page,
+                )
+        else:
+            self.Pages = []
+            self.PageIndex = 0
 
     def parsePosts(self, page) -> List[FanboxPost]:
         js = PixivJson.decode(page)
@@ -693,7 +728,12 @@ class FanboxArtist(object):
 
             next_url_from_payload = None
             if isinstance(js_body, list):
+                # Legacy listCreator: body = [post, post, ...]
                 post_root = js_body
+            elif isinstance(js_body, dict) and "posts" in js_body:
+                # Current listCreator (2026+): body = {"posts": [post, ...]}
+                post_root = js_body["posts"] if isinstance(js_body["posts"], list) else []
+                next_url_from_payload = js_body.get("nextUrl")
             elif isinstance(js_body, dict) and "post" in js_body:
                 post_data = js_body["post"]
                 if isinstance(post_data, list):
