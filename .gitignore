@@ -1,6 +1,8 @@
-# VSCode files
+# VSCode: ignore workspace junk, keep the shared launch config
 .vscode/*
+!.vscode/launch.json
 *.code-workspace
+
 # Environments
 .env
 .venv
@@ -9,6 +11,14 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+
+# Local editor / agent tooling (must not be published)
+.kilo/
+.cursor/
+.grok/
+.claude/
+.codebase-memory/
+
 # others
 Downloaded*.txt
 _backup/*
@@ -37,14 +47,13 @@ error*.html
 Images/*
 testapp*/*
 .idea/*
+.vs/*
 *.bak
 *.pyo
 pixivutil.log*
 .pytest_cache/*
 __pycache__/*
 
-.idea/*
-.vs/*
 blacklist_members.txt
 blacklist_tags.txt
 blacklist_titles.txt
@@ -76,7 +85,4 @@ Network Trash Folder
 Temporary Items
 .apdisk
 Error*
-
-.codebase-memory/
-.env
 
