@@ -347,6 +347,55 @@ class TestPixivHelper(unittest.TestCase):
         self.assertEqual(PixivHelper.coalesce(None, "a", "b"), "a")
         self.assertEqual(PixivHelper.coalesce(None, None, "fallback"), "fallback")
 
+    def testParsePixivLocaleEnglishRedirect(self):
+        self.assertEqual(PixivHelper.parse_pixiv_locale("https://www.pixiv.net/en/"), "/en")
+        self.assertEqual(PixivHelper.parse_pixiv_locale("https://www.pixiv.net/en"), "/en")
+        self.assertEqual(PixivHelper.parse_pixiv_locale("/en/"), "/en")
+        self.assertEqual(PixivHelper.parse_pixiv_locale("https://www.pixiv.net/zh_TW/"), "/zh_TW")
+
+    def testParsePixivLocaleJapaneseHomepage(self):
+        self.assertEqual(PixivHelper.parse_pixiv_locale("https://www.pixiv.net"), "")
+        self.assertEqual(PixivHelper.parse_pixiv_locale("https://www.pixiv.net/"), "")
+        self.assertEqual(PixivHelper.parse_pixiv_locale(""), "")
+        self.assertEqual(PixivHelper.parse_pixiv_locale("https://accounts.pixiv.net/login"), "")
+        self.assertEqual(PixivHelper.parse_pixiv_locale("https://www.pixiv.net/artworks/123"), "")
+
+    def testLangQuerySuffixStripsLeadingSlash(self):
+        self.assertEqual(PixivHelper.lang_query_suffix("/en"), "&lang=en")
+        self.assertEqual(PixivHelper.lang_query_suffix("en"), "&lang=en")
+        self.assertEqual(PixivHelper.lang_query_suffix("/en", prefix="?"), "?lang=en")
+        self.assertEqual(PixivHelper.lang_query_suffix(""), "")
+        self.assertEqual(PixivHelper.lang_query_suffix(None), "")
+        self.assertEqual(PixivHelper.lang_query_suffix("/zh_TW"), "&lang=zh_TW")
+
+    def testCookieLoginIdentityEnglishRedirectSetsUserIdAndLocale(self):
+        uid, locale = PixivHelper.cookie_login_identity({
+            "x-userid": "5513453",
+            "Location": "https://www.pixiv.net/en/",
+        })
+        self.assertEqual(uid, 5513453)
+        self.assertEqual(locale, "/en")
+
+    def testCookieLoginIdentityMixedCaseHeaders(self):
+        uid, locale = PixivHelper.cookie_login_identity({
+            "X-UserId": "5513453",
+            "location": "/en/",
+        })
+        self.assertEqual(uid, 5513453)
+        self.assertEqual(locale, "/en")
+
+    def testCookieLoginIdentityJapaneseHasUserIdWithoutLocale(self):
+        uid, locale = PixivHelper.cookie_login_identity({"x-userid": "5513453"})
+        self.assertEqual(uid, 5513453)
+        self.assertEqual(locale, "")
+
+    def testCookieLoginIdentityMissingUserId(self):
+        uid, locale = PixivHelper.cookie_login_identity({
+            "Location": "https://accounts.pixiv.net/login",
+        })
+        self.assertIsNone(uid)
+        self.assertEqual(locale, "")
+
 
 if __name__ == '__main__':
     # unittest.main()

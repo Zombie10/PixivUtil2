@@ -386,9 +386,22 @@ class PixivBrowser(FanboxClientMixin, SketchClientMixin, mechanize.Browser):
                     headers = dict(ex.headers.items())
             finally:
                 self.set_handle_redirect(True)
-            x_uid = headers.get('x-userid') or headers.get('X-UserId') or headers.get('X-Userid')
-            if x_uid:
-                PixivHelper.print_and_log('info', f'Login recognized by server (x-userid={x_uid}).')
+            uid, locale = PixivHelper.cookie_login_identity(headers)
+            if uid is not None:
+                self._myId = uid
+                self._locale = locale
+                if not self._locale:
+                    try:
+                        res = self.open_with_retry('https://www.pixiv.net')
+                        if res is not None:
+                            self._locale = PixivHelper.parse_pixiv_locale(str(res.geturl()))
+                            res.close()
+                    except BaseException:
+                        PixivHelper.get_logger().debug(
+                            'Locale detection follow-up failed: %s', sys.exc_info())
+                PixivHelper.print_and_log('info', f'Login recognized by server (x-userid={uid}).')
+                PixivHelper.print_and_log('info', f'My User Id: {self._myId}.')
+                PixivHelper.get_logger().info('Locale = %s', self._locale)
                 return True
 
             res = self.open_with_retry('https://www.pixiv.net')  # + self._locale)
@@ -413,9 +426,7 @@ class PixivBrowser(FanboxClientMixin, SketchClientMixin, mechanize.Browser):
                 PixivHelper.print_and_log('info', 'Login successful.')
                 PixivHelper.get_logger().info('Logged in using cookie')
                 self.getMyId(parsed_str)
-                temp_locale = str(res.geturl()).replace('https://www.pixiv.net', '').replace('/', '')
-                if len(temp_locale) > 0:
-                    self._locale = '/' + temp_locale
+                self._locale = PixivHelper.parse_pixiv_locale(str(res.geturl()))
                 PixivHelper.get_logger().info('Locale = %s', self._locale)
             else:
                 PixivHelper.get_logger().info('Failed to log in using cookie')
@@ -598,7 +609,7 @@ class PixivBrowser(FanboxClientMixin, SketchClientMixin, mechanize.Browser):
         try:
 
             # https://www.pixiv.net/ajax/illust/129153804?lang=en
-            js_image_info = f"https://www.pixiv.net/ajax/illust/{image_id}?lang={self._locale}"
+            js_image_info = f"https://www.pixiv.net/ajax/illust/{image_id}{PixivHelper.lang_query_suffix(self._locale, prefix='?')}"
             response = self.getPixivPage(js_image_info, enable_cache=False)
             PixivHelper.print_and_log('debug', f'js_image_info = {response}')
 
@@ -887,8 +898,7 @@ class PixivBrowser(FanboxClientMixin, SketchClientMixin, mechanize.Browser):
         url = f'https://www.pixiv.net/ajax/search/tags/{encoded_tag}'
         if lang is None:
             lang = self._locale
-        if lang:
-            url = f'{url}?lang={lang}'
+        url = f'{url}{PixivHelper.lang_query_suffix(lang, prefix="?")}'
 
         response = self._get_from_cache(url)
         if response is None:
@@ -920,9 +930,7 @@ class PixivBrowser(FanboxClientMixin, SketchClientMixin, mechanize.Browser):
     def getMangaSeriesJson(self, manga_series_id: int, current_page: int):
         PixivHelper.print_and_log("info", f"Getting Manga Series: {manga_series_id} from page: {current_page}")
         # get the manga information https://www.pixiv.net/ajax/series/6474?p=5&lang=en
-        locale = ""
-        if self._locale is not None and len(self._locale) > 0:
-            locale = f"&lang={self._locale}"
+        locale = PixivHelper.lang_query_suffix(self._locale)
         url = f"https://www.pixiv.net/ajax/series/{manga_series_id}?p={current_page}{locale}"
         response = self.getPixivPage(url, enable_cache=True)
         return response
@@ -940,10 +948,8 @@ class PixivBrowser(FanboxClientMixin, SketchClientMixin, mechanize.Browser):
 
     def getNovelPage(self, novel_id) -> PixivNovel:
         # https://www.pixiv.net/ajax/novel/14521816?lang=en
-        locale = ""
-        if self._locale is not None and len(self._locale) > 0:
-            locale = f"&lang={self._locale}"
-        url = f"https://www.pixiv.net/ajax/novel/{novel_id}?{locale}"
+        locale = PixivHelper.lang_query_suffix(self._locale, prefix="?")
+        url = f"https://www.pixiv.net/ajax/novel/{novel_id}{locale}"
         response = self.getPixivPage(url, enable_cache=True)
 
         _tzInfo = None
@@ -959,20 +965,16 @@ class PixivBrowser(FanboxClientMixin, SketchClientMixin, mechanize.Browser):
         return novel
 
     def getNovelSeries(self, novel_series_id) -> NovelSeries:
-        locale = ""
-        if self._locale is not None and len(self._locale) > 0:
-            locale = f"&lang={self._locale}"
+        locale = PixivHelper.lang_query_suffix(self._locale, prefix="?")
 
         # https://www.pixiv.net/ajax/novel/series/1328575?lang=en
-        url = f"https://www.pixiv.net/ajax/novel/series/{novel_series_id}?{locale}"
+        url = f"https://www.pixiv.net/ajax/novel/series/{novel_series_id}{locale}"
         response = self.getPixivPage(url, enable_cache=True)
         novel_series = NovelSeries(novel_series_id, series_json=response)
         return novel_series
 
     def getNovelSeriesContent(self, novel_series, limit=MAX_LIMIT, current_page=1, order_by='asc'):
-        locale = ""
-        if self._locale is not None and len(self._locale) > 0:
-            locale = f"&lang={self._locale}"
+        locale = PixivHelper.lang_query_suffix(self._locale)
         # https://www.pixiv.net/ajax/novel/series_content/1328575?limit=10&last_order=0&order_by=asc&lang=en
         params = list()
         params.append(f"limit={limit}")
@@ -988,12 +990,7 @@ class PixivBrowser(FanboxClientMixin, SketchClientMixin, mechanize.Browser):
 
     def getFollowedNewIllusts(self, mode="all", current_page=1) -> PixivNewIllustBookmark:
         # Issue #1028
-        locale = ""
-        if self._locale is not None and len(self._locale) > 0:
-            if self._locale[0] == "/":
-                locale = f"&lang={self._locale[1:]}"
-            else:
-                locale = f"&lang={self._locale}"
+        locale = PixivHelper.lang_query_suffix(self._locale)
         url = f"https://www.pixiv.net/ajax/follow_latest/illust?p={current_page}&mode={mode}{locale}"
         response = self.getPixivPage(url, enable_cache=True)
         PixivHelper.get_logger().info(f"Source URL: {url}")
@@ -1020,12 +1017,7 @@ class PixivBrowser(FanboxClientMixin, SketchClientMixin, mechanize.Browser):
         return result
 
     def getNewIllust(self, last_id=0, limit=20, type_mode="illust", r18=False):
-        locale = ""
-        if self._locale is not None and len(self._locale) > 0:
-            if self._locale[0] == "/":
-                locale = f"&lang={self._locale[1:]}"
-            else:
-                locale = f"&lang={self._locale}"
+        locale = PixivHelper.lang_query_suffix(self._locale)
         if type_mode not in ('illust', 'manga'):
             raise PixivException(f"Invalid type={type_mode} for PixivNewIllust, only 'illust' or 'manga' are accepted!", errorCode=PixivException.OTHER_ERROR)
 

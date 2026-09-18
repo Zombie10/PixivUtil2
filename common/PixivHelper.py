@@ -733,6 +733,82 @@ def coalesce(*values):
     return None
 
 
+# Pixiv homepage locale prefix: /en, /ko, /zh, /zh_TW. Japanese has no prefix.
+_PIXIV_LOCALE_RE = re.compile(r"^[a-z]{2}(?:[_-][A-Za-z]{2})?$")
+
+
+def _header_get(headers, *names):
+    if not headers:
+        return None
+    lowered = {str(k).lower(): v for k, v in headers.items()}
+    for name in names:
+        value = lowered.get(name.lower())
+        if value is not None and str(value).strip() != "":
+            return value
+    return None
+
+
+def parse_pixiv_locale(url):
+    """Return '/en'-style path prefix from a pixiv URL, or '' for Japanese."""
+    if not url:
+        return ""
+    raw = str(url).strip()
+    if not raw:
+        return ""
+    if "://" not in raw:
+        if not raw.startswith("/"):
+            raw = "/" + raw
+        raw = "https://www.pixiv.net" + raw
+    parsed = urllib.parse.urlparse(raw)
+    host = (parsed.netloc or "").lower()
+    if host and "pixiv.net" not in host:
+        return ""
+    parts = [p for p in parsed.path.split("/") if p]
+    if not parts:
+        return ""
+    first = parts[0]
+    if _PIXIV_LOCALE_RE.match(first):
+        return "/" + first
+    return ""
+
+
+def lang_query_suffix(locale, prefix="&"):
+    """Build '&lang=en' / '?lang=en' from locale '/en' or 'en'. Empty if no locale."""
+    if not locale:
+        return ""
+    lang = str(locale).lstrip("/")
+    if not lang:
+        return ""
+    return f"{prefix}lang={lang}"
+
+
+def parse_x_userid(headers):
+    raw = _header_get(headers, "x-userid")
+    if raw is None:
+        return None
+    try:
+        uid = int(str(raw).strip())
+    except (TypeError, ValueError):
+        return None
+    if uid <= 0:
+        return None
+    return uid
+
+
+def cookie_login_identity(headers):
+    """Parse user id and locale from a no-redirect pixiv.net homepage response.
+
+    When the account language is English, pixiv 302s to /en/ and still sends
+    x-userid. Returning only 'logged in' without these values used to request
+    /ajax/user/0/... and omit &lang=en, which Pixiv rejects with HTTP 400.
+    """
+    uid = parse_x_userid(headers)
+    if uid is None:
+        return (None, "")
+    location = _header_get(headers, "location") or ""
+    return (uid, parse_pixiv_locale(location))
+
+
 def clear_all():
     all_vars = [var for var in globals() if (var[:2], var[-2:]) != ("__", "__") and var != "clear_all"]
     for var in all_vars:
@@ -983,10 +1059,7 @@ def generate_search_tag_url(tags,
     if sort_order in ('date', 'date_d', 'popular_d', 'popular_male_d', 'popular_female_d'):
         order = f'&order={sort_order}'
 
-    if locale != "":
-        if locale.startswith("/"):
-            locale = locale[1:]
-        locale = f"&lang={locale}"
+    locale = lang_query_suffix(locale)
 
     if member_id is not None:
         url = f'https://www.pixiv.net/member_illust.php?id={member_id}&tag={tags}&p={page}{mode}{order}'

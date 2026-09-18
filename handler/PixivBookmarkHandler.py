@@ -387,9 +387,7 @@ def get_bookmarks(caller, config, hide, start_page=1, end_page=0, member_id=None
     limit = 48
     offset = 0
     is_json = False
-    locale = "&lang=en"
-    if br._locale is not None and len(br._locale) > 0:
-        locale = f"&lang={br._locale}"
+    locale = PixivHelper.lang_query_suffix(br._locale) or "&lang=en"
 
     while True:
         if end_page != 0 and i > end_page:
@@ -459,12 +457,7 @@ def get_image_bookmark(caller, config, hide, start_page=1, end_page=0, tag=None,
         offset = limit * (i - 1)
         PixivHelper.print_and_log('info', f"Importing user's bookmarked image from page {i}")
 
-        locale = ""
-        if br._locale is not None and len(br._locale) > 0:
-            if br._locale[0] == "/":
-                locale = f"&lang={br._locale[1:]}"
-            else:
-                locale = f"&lang={br._locale}"
+        locale = PixivHelper.lang_query_suffix(br._locale)
 
         url = f"https://www.pixiv.net/ajax/user/{member_id}/illusts/bookmarks?tag={encoded_tag}&offset={offset}&limit={limit}&rest={show}{locale}"
         if use_image_tag:  # don't filter based on user's bookmark tag
@@ -526,12 +519,7 @@ def get_userId_bookmark(caller, config, hide, start_page=1, end_page=0, tag=None
         PixivHelper.print_and_log('info', f"Importing user's bookmarked image from page {i}")
 
 
-        locale = ""
-        if br._locale is not None and len(br._locale) > 0:
-            if br._locale[0] == "/":
-                locale = f"&lang={br._locale[1:]}"
-            else:
-                locale = f"&lang={br._locale}"
+        locale = PixivHelper.lang_query_suffix(br._locale)
 
         url = f"https://www.pixiv.net/ajax/user/{member_id}/illusts/bookmarks?tag={encoded_tag}&offset={offset}&limit={limit}&rest={show}{locale}"
         if use_image_tag:  # don't filter based on user's bookmark tag
